@@ -1,97 +1,39 @@
-# 🐱 猫猫云订阅桥接 (MaoMaoCloud Subscribe Bridge)
+# maomaocloud-subscribe
 
-猫猫云 6.0 客户端封闭了标准 Clash 订阅（`/api/v1/client/subscribe` 返回空），节点仅通过其定制 App 下发。本项目通过逆向其私有协议，把订阅还原为标准 **Clash / FlClash / Mihomo** 配置，**无需官方 App**。
+猫猫云订阅桥接。猫猫云把标准订阅接口关了，只能用它的 App；这个项目把它的私有协议还原成标准 Clash / FlClash 订阅。
 
-> 📖 完整逆向分析见 [`REVERSE_ENGINEERING.md`](./REVERSE_ENGINEERING.md)
+## 文件
 
----
+- `src/index.ts` — Cloudflare Worker，部署后得到一个订阅链接
+- `fetch_sub_api.py` — 本地跑，直接生成 yaml 文件
+- `REVERSE_ENGINEERING.md` — 逆向记录
 
-## ✨ 能力
+## Worker 用法
 
-- ✅ 还原猫猫云私有 API 调用路径（登录 / getSubscribe / server/fetch）
-- ✅ 识别节点私有域名解析机制（**阿里云 PrivateZone DoH**），动态解析真实入口 IP
-- ✅ 生成标准 Clash YAML（anytls 节点 + 规则组 + DNS），实测 **528 Mbps / 全节点连通**
-- ✅ 本地 CLI（Python）+ 云端（Cloudflare Workers，TypeScript）双实现
-
----
-
-## 📦 仓库结构
-
-```
-├── src/index.ts              # Cloudflare Worker（TypeScript，订阅 API）
-├── fetch_sub_api.py          # 本地自动化 CLI（登录→节点→生成 YAML）
-├── examples/MaoMaoCloud_FlClash.yaml   # 生成示例配置（可导入 FlClash）
-├── REVERSE_ENGINEERING.md    # 逆向工程文档
-├── wrangler.jsonc            # Worker 配置
-├── package.json / tsconfig.json
-```
-
----
-
-## ☁️ 方式一：Cloudflare Worker（推荐长期使用）
-
-把 Worker 部署后，得到**一个标准订阅链接**，直接填进 FlClash / Clash Verge 即可。
-
-### 部署
+部署：
 
 ```bash
 npm install
-npx wrangler login
 npx wrangler deploy
 ```
 
-### 使用（凭据通过 URL 参数传入，无需配置环境变量）
+订阅链接（参数二选一）：
 
 ```
-# 方式 A：账号 + 密码
-https://<your-worker>.workers.dev/sub?email=xx@xx.com&password=xxxx
-
-# 方式 B：auth_data (JWT token，可避免每次登录)
-https://<your-worker>.workers.dev/sub?token=<auth_data>
+/sub?email=账号&password=密码
+/sub?token=<auth_data>        # 拿过 token 就不用每次登录
 ```
 
-- 可选参数 `host`：强制指定某个 API 域名
-- 未指定 `host` 时，Worker 内置多个 API 域名（`api.brfcdu.cn` / `mmyapi.lnnrhtp.com` / `app.maomao234.com` / `dy.maomaoapi.org`），**每次请求随机选一个，失败自动回退到其它域名**
-- 节点 IP 每次更新时由 Worker 自动通过猫猫云 DoH 解析（IP 动态变化）
+可选 `host` 强制指定 API 域名。不指定时内置多个域名，随机选一个，失败自动换下一个。
 
-FlClash 中新增订阅并填入上述 URL 即可。
-
-### 本地开发
+## Python 用法
 
 ```bash
-npm run dev        # http://localhost:8787
-npm run typecheck  # tsc
+python3 fetch_sub_api.py 账号 密码 [API域名] 输出.yaml
 ```
 
----
+## 说明
 
-## 🐍 方式二：本地 Python CLI
-
-```bash
-python3 fetch_sub_api.py <邮箱> <密码> <API域名> 输出.yaml
-```
-
-每次运行自动：登录 → 取 UUID → 拉节点列表 → DoH 解析最新 IP → 生成 YAML。
-
-> 生成的 YAML 导入 FlClash 即可（示例见 `examples/`）。
-
----
-
-## 🔐 原理速览（详见 REVERSE_ENGINEERING.md）
-
-| 步骤 | 说明 |
-|---|---|
-| 1 登录 | `POST /api/v1/passport/auth/login`（form）→ `auth_data`(JWT) |
-| 2 鉴权 | JWT **直放 `Authorization`（无 Bearer）** |
-| 3 UUID | `GET /api/v1/user/getSubscribe` → `uuid`（= anytls 节点密码） |
-| 4 节点池 | `GET /api/v1/user/server/fetch` → 全量节点（电脑端 ~40 个可用） |
-| 5 真实 IP | 节点私有域名必须用猫猫云 **阿里云 PrivateZone DoH** 解析：`https://874441-ywvcq20ne9plstif.alidns.com/dns-query`（RFC 8484） |
-| 6 输出 | 标准 Clash YAML（server 填解析 IP + DNS 兜底配置猫猫云 DoH） |
-
-**节点形态**：`anytls`，`password=UUID`，SNI 伪装 `osxapps.itunes.apple.com`，入口 IP 国内为广州电信中转、海外为洛杉矶。
-
----
-
-## ⚠️ 免责声明
-
-本项目仅供个人学习与技术研究使用。请遵守猫猫云服务条款及当地法律法规，账号凭据请自行妥善保管。
+- 节点是 anytls，密码是账号的 uuid，从 `getSubscribe` 拿
+- 节点域名是私有的，公网解析不到，必须用猫猫云自己的 DoH（阿里云 PrivateZone）解析，IP 会变，每次都要重新解析
+- 生成的配置在 FlClash / Clash Verge 里直接用
