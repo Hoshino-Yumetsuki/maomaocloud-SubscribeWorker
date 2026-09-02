@@ -47,8 +47,14 @@ const API_HOSTS = [
   "https://dy.maomaoapi.org",
 ];
 const MAOMAO_DOH_HOST = "874441-ywvcq20ne9plstif.alidns.com";
+const MAOMAO_DOH_URL = `https://${MAOMAO_DOH_HOST}/dns-query`;
 const UA = "Mozilla/5.0 (dart:io) SuperAccelerator";
 const SNI = "osxapps.itunes.apple.com";
+
+// ⭐ 逆向提取的 v100 订阅解密常量（见 REVERSE_ENGINEERING.md 第五节）
+// 链路: HTTP body(base64) -> AES-128-CBC 解密 -> base64 -> 官方标准 Clash YAML
+const AES_KEY = "4422a60e08c97f30";
+const AES_IV = "8c97f304422a60e0";
 
 const ipCache = new Map<string, string>();
 
@@ -134,6 +140,116 @@ async function resolveMaomaoDomain(domain: string): Promise<string | null> {
   }
 }
 
+/* ---------------- 官方 v100 订阅解密（模式 B /official） ---------------- */
+
+function b64ToBytes(s: string): Uint8Array {
+  const bin = atob(s);
+  const u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return u;
+}
+
+async function aesCbcDecrypt(keyStr: string, ivStr: string, data: Uint8Array): Promise<Uint8Array> {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey("raw", enc.encode(keyStr), { name: "AES-CBC" }, false, [
+    "decrypt",
+  ]);
+  const out = await crypto.subtle.decrypt({ name: "AES-CBC", iv: enc.encode(ivStr) }, key, data);
+  return new Uint8Array(out);
+}
+
+async function decryptV100(body: string): Promise<string> {
+  // ① HTTP body 为 base64（可能带换行）
+  const layer1 = b64ToBytes(body.replace(/\s+/g, ""));
+  // ② AES-128-CBC 解密（PKCS#7 由 WebCrypto 处理）→ 内层又是一段 base64 文本
+  const layer2 = await aesCbcDecrypt(AES_KEY, AES_IV, layer1);
+  const innerB64 = new TextDecoder().decode(layer2).trim();
+  // ③ 再解一层 base64 → 最终明文 Clash YAML
+  const finalBytes = b64ToBytes(innerB64.replace(/\s+/g, ""));
+  return new TextDecoder().decode(finalBytes);
+}
+
+// 拿官方订阅 token（32hex）：登录响应 data.token，或 getSubscribe 返回的 sub.token
+async function fetchOfficialToken(host: string, email: string, password: string, token: string): Promise<string> {
+  if (token && !/^[0-9a-f]{32}$/i.test(token.trim())) {
+    // token 参数是 JWT(auth_data) 而非 32hex：先换订阅 token
+    const sub = await maomaoApi<{ token?: string }>(host, "/api/v1/user/getSubscribe", token.trim());
+    if (!sub?.token) throw new Error("getSubscribe 未返回订阅 token");
+    return sub.token;
+  }
+  if (token) return token.trim(); // 32hex 订阅 token 直用
+  // 登录模式：响应 data.token 即订阅 token
+  const resp = await fetch(`${host}/api/v1/passport/auth/login`, {
+    method: "POST",
+    headers: {
+      "User-Agent": UA,
+      "Content-Type": "application/x-www-form-urlencoded",
+      Accept: "application/json",
+    },
+    body: new URLSearchParams({ email, password }).toString(),
+  });
+  const data = (await resp.json()) as { status?: string; message?: string; data?: { token?: string } };
+  if (data?.status !== "success" || !data?.data?.token) {
+    throw new Error(`猫猫云登录失败: ${data?.message ?? resp.status}`);
+  }
+  return data.data.token;
+}
+
+// 可选: 把 flow-map 节点里的 maomaogtm 域名替换为 DoH 解析出的真实 IP
+async function replaceMaomaoDomainsWithIp(yaml: string): Promise<string> {
+  const doms = new Set<string>();
+  for (const m of yaml.matchAll(/server:\s*([a-z0-9.-]+\.maomaogtm\.com)/gi)) doms.add(m[1]);
+  for (const d of doms) {
+    const ip = await resolveMaomaoDomain(d);
+    if (ip) yaml = yaml.replace(new RegExp(`(server:\\s*)${d.replace(/\./g, "\\.")}(\\s*[,}])`, "g"), `$1${ip}$2`);
+  }
+  return yaml;
+}
+
+// 官方直解模式：拉 v100 加密订阅 → AES 解密 → 返回官方标准配置（105 节点 + 官方分流）
+async function handleOfficialSub(url: URL): Promise<Response> {
+  const email = url.searchParams.get("email") ?? "";
+  const password = url.searchParams.get("password") ?? "";
+  const token = url.searchParams.get("token") ?? "";
+  const host = url.searchParams.get("host") ?? "";
+  const wantIp = url.searchParams.get("ip") === "1";
+
+  if (!token && (!email || !password)) {
+    return jsonError(400, "请提供参数: ?email=&password= 或 ?token=<订阅token|auth_data>");
+  }
+
+  let lastErr: unknown;
+  for (const h of shuffledHosts(host)) {
+    try {
+      const subToken = await fetchOfficialToken(h, email, password, token);
+      const resp = await fetch(`${h}/api/v100/client/subscribe?token=${encodeURIComponent(subToken)}`, {
+        headers: { "User-Agent": UA, Accept: "*/*" },
+      });
+      if (!resp.ok) throw new Error(`v100 HTTP ${resp.status}`);
+      const body = await resp.text();
+      if (!body) throw new Error("v100 返回空");
+      let yaml = await decryptV100(body);
+      if (!/proxies:/.test(yaml)) throw new Error("解密结果非合法配置");
+      if (wantIp) yaml = await replaceMaomaoDomainsWithIp(yaml);
+      return cors(
+        new Response(yaml, {
+          status: 200,
+          headers: {
+            "Content-Type": "text/yaml; charset=utf-8",
+            "Content-Disposition": 'attachment; filename="maomaocloud-official.yaml"',
+            "Cache-Control": "no-store",
+            "Profile-Update-Interval": "24",
+          },
+        })
+      );
+    } catch (err) {
+      console.warn("official host failed", { host: h, message: err instanceof Error ? err.message : String(err) });
+      lastErr = err;
+    }
+  }
+  return jsonError(502, `官方订阅获取失败: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`);
+}
+
 async function maomaoLogin(host: string, email: string, password: string): Promise<string> {
   const resp = await fetch(`${host}/api/v1/passport/auth/login`, {
     method: "POST",
@@ -155,6 +271,70 @@ async function maomaoLogin(host: string, email: string, password: string): Promi
   return data.data.auth_data;
 }
 
+// /token：账号密码 → token / auth_data / uuid（供 /full?token=、/lite 及手工构造节点用）
+async function handleToken(url: URL): Promise<Response> {
+  const email = url.searchParams.get("email") ?? "";
+  const password = url.searchParams.get("password") ?? "";
+  const host = url.searchParams.get("host") ?? "";
+  if (!email || !password) {
+    return jsonError(400, "请提供参数: ?email=&password=");
+  }
+  let lastErr: unknown;
+  for (const h of shuffledHosts(host)) {
+    try {
+      const resp = await fetch(`${h}/api/v1/passport/auth/login`, {
+        method: "POST",
+        headers: {
+          "User-Agent": UA,
+          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json",
+        },
+        body: new URLSearchParams({ email, password }).toString(),
+      });
+      const data = (await resp.json()) as {
+        status?: string;
+        message?: string;
+        data?: { auth_data?: string; token?: string };
+      };
+      if (data?.status !== "success" || !data?.data?.auth_data) {
+        throw new Error(`登录失败: ${data?.message ?? resp.status}`);
+      }
+      const jwt = data.data.auth_data;
+      const sub = await maomaoApi<{ uuid?: string; subscribe_url?: string }>(
+        h,
+        "/api/v1/user/getSubscribe",
+        jwt
+      );
+      return cors(
+        new Response(
+          JSON.stringify(
+            {
+              email,
+              token: data.data.token ?? null,
+              auth_data: jwt,
+              uuid: sub?.uuid ?? null,
+              subscribe_url: sub?.subscribe_url ?? null,
+            },
+            null,
+            2
+          ),
+          {
+            status: 200,
+            headers: {
+              "Content-Type": "application/json; charset=utf-8",
+              "Cache-Control": "no-store",
+            },
+          }
+        )
+      );
+    } catch (err) {
+      console.warn("token host failed", { host: h, message: err instanceof Error ? err.message : String(err) });
+      lastErr = err;
+    }
+  }
+  return jsonError(502, `获取失败: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`);
+}
+
 async function maomaoApi<T>(host: string, path: string, jwt: string): Promise<T> {
   const resp = await fetch(`${host}${path}`, {
     headers: { "User-Agent": UA, Authorization: jwt, Accept: "application/json" },
@@ -164,7 +344,14 @@ async function maomaoApi<T>(host: string, path: string, jwt: string): Promise<T>
 }
 
 function shuffledHosts(override?: string): string[] {
-  const hosts = override && override.trim() ? [override.replace(/\/+$/, "")] : [...API_HOSTS];
+  let hosts: string[];
+  if (override && override.trim()) {
+    let o = override.trim().replace(/\/+$/, "");
+    if (!/^https?:\/\//i.test(o)) o = `https://${o}`;
+    hosts = [o];
+  } else {
+    hosts = [...API_HOSTS];
+  }
   for (let i = hosts.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     const t = hosts[i];
@@ -349,11 +536,19 @@ function handleHome(): Response {
   const html = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
 <title>maomaocloud sub</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<style>body{font-family:system-ui;background:#0f172a;color:#e2e8f0;max-width:720px;margin:40px auto;padding:0 20px}
-code{background:#1e293b;padding:2px 6px;border-radius:4px}.box{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:20px;margin:16px 0}</style>
+<style>body{font-family:system-ui;background:#0f172a;color:#e2e8f0;max-width:820px;margin:40px auto;padding:0 20px}
+code{background:#1e293b;padding:2px 6px;border-radius:4px;word-break:break-all;font-size:14px}.box{border:1px solid #334155;border-radius:10px;padding:14px 18px;margin:12px 0}</style>
 </head><body>
-<h1>maomaocloud sub</h1>
-<div class="box"><code>/sub?email=xx@xx.com&password=xxxx</code><br><code>/sub?token=&lt;auth_data&gt;</code><br>可选 <code>host</code></div>
+<h2>maomaocloud sub</h2>
+<p style="color:#94a3b8">参数 email+password 或 token 二选一</p>
+<div class="box"><b>/full</b> — 解密官方 v100 订阅，官方完整配置（105 节点）<br>
+<code>https://maomaocloud-subscribeworker.robotxhub.ai/full?email=xx@xx.com&password=xxxx</code><br>
+<code>https://maomaocloud-subscribeworker.robotxhub.ai/full?token=&lt;token&gt;</code></div>
+<div class="box"><b>/lite</b> — 按逆向节点映射精简拼装<br>
+<code>https://maomaocloud-subscribeworker.robotxhub.ai/lite?email=xx@xx.com&password=xxxx</code><br>
+<code>https://maomaocloud-subscribeworker.robotxhub.ai/lite?token=&lt;auth_data&gt;</code></div>
+<div class="box"><b>/token</b> — 账号密码换 token / auth_data / uuid（JSON）<br>
+<code>https://maomaocloud-subscribeworker.robotxhub.ai/token?email=xx@xx.com&password=xxxx</code></div>
 </body></html>`;
   return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
 }
@@ -365,8 +560,16 @@ export default {
     try {
       if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
       if (url.pathname === "/" || url.pathname === "") return handleHome();
-      if (url.pathname === "/sub" || url.pathname === "/clash") {
+      // /full — 官方全量(推荐): 解密 v100 官方订阅
+      if (url.pathname === "/full" || url.pathname === "/official" || url.pathname === "/v100") {
+        return await handleOfficialSub(url);
+      }
+      // /lite — 精简手动(NODE_MAP)
+      if (url.pathname === "/lite" || url.pathname === "/sub" || url.pathname === "/clash") {
         return await handleSubscribe(url);
+      }
+      if (url.pathname === "/token") {
+        return await handleToken(url);
       }
       return jsonError(404, "Not Found");
     } catch (err) {

@@ -1,7 +1,9 @@
 # 猫猫云 (MaoMaoCloud) 客户端逆向工程报告
 
-> 分析对象：`maomao6.0.0.deb`（猫猫云 Cat 客户端 Linux 版）
-> 逆向日期：2026-09-02
+> 分析对象：
+> - `maomao6.0.0.deb` — 猫猫云 Cat 客户端 **Linux 版**（Flutter UI + CatCore Go 内核）
+> - `maomao2.3.6.apk` — 猫猫云 Cat 客户端 **Android 版（最新）**（Kotlin/Java + Kr328/ClashForAndroid + 标准 mihomo 内核）
+> 逆向日期：2026-09-02 ｜ 状态：**订阅 v100 加密已完整破解 ✅**
 
 ---
 
@@ -125,41 +127,65 @@ App 加载后喂给 CatCore 的节点为标准 mihomo anytls 格式：
   - `us.maomaogtm.com`（美国节点，端口 60129~60138）
 - **端口 = 地区基准端口 + 编号**（如 HK-1→60000, KR-1→60100, FR-1→60101 ...）
 
-已从运行内存提取到 **47+ 个节点的完整 name→(server, port) 映射**，见 `MaoMaoCloud_FlClash.yaml` 与 `fetch_sub_api.py` 内置表。
+v100 密文**完整解密后**实际包含 **105 个节点**（flow-map 单行格式，见下），`proxy-groups` 部分由 App/内核额外生成。解密得到的真实 YAML 落在 `/tmp/maomao_FINAL.yaml`（192,743 字节），可作为任何第三方客户端的**官方标准订阅格式**。
 
 ---
 
-## 五、v100 数据解密（逆向进度）
+## 五、v100 数据解密（✅ 已完整破解）
 
-### 已确认
-- 解密发生在 **CatCore**（魔改 mihomo）内部。App 通过 socket 下发 JSON-RPC：
-  ```
-  {"method":"getConfig","data":"<path>/profiles/999999.yaml",...}
-  ```
-  CatCore 收到后**读取该密文文件并自行解密加载**（内核成功运行、节点可见）。
-- 相关符号（Go pclntab / GoReSym 提取）：
-  ```
-  github.com/metacubex/mihomo/common/convert.DecryptConfig          @0x108D000
-  github.com/metacubex/mihomo/common/convert.DecodeAESBase64        (AES + base64 解密)
-  github.com/metacubex/mihomo/common/convert.DecodeObfuscatedBase64
-  github.com/metacubex/mihomo/common/convert.isValidConfig
-  github.com/metacubex/mihomo/common/convert.isYAMLConfig
-  github.com/metacubex/mihomo/common/convert.TryDecodeBase64
-  ```
-- 编译机源码路径泄露：`/home/runner/work/NetAPP/NetAPP/core/Clash.Meta/common/convert/decrypt.go`
-  → 项目代号 **NetAPP**，为 cat.cloud 私有魔改（开源 mihomo 中无 DecryptConfig）
-- 算法推断：内容先 `DecodeObfuscatedBase64`/`TryDecodeBase64` 还原，再 **AES 解密**（`DecodeAESBase64`），解密失败则回退当普通 YAML（`isYAMLConfig`）。
+### 解密链路（最终确认，本地可一键复现）
+```
+GET {host}/api/v100/client/subscribe?token=<token>
+   │
+   ▼  ① HTTP body：342,680 字符（标准 base64）
+base64 解码
+   │
+   ▼  ② 257,008 字节 AES-128-CBC 密文（16 对齐，PKCS#7）
+AES-128-CBC 解密
+   key = "4422a60e08c97f30"     ← 硬编码于 CatCore
+   iv  = "8c97f304422a60e0"     ← 硬编码于 CatCore
+   │
+   ▼  ③ 256,992 字节（又是 base64 文本，注意：AES 解密后还有一层 base64）
+base64 解码
+   │
+   ▼  ④ 192,743 字节最终明文 YAML（标准 mihomo 配置）
+      （proxies: 105 个 anytls 节点 + proxy-groups + DNS 段）
+```
 
-### 未完成
-- **AES 密钥未最终提取**：二进制 stripped（无 DWARF），dlv/gdb 读取局部变量受限；
-  已成功在 `DecryptConfig` 设断点并触发（addr 0x108D000 = pclntab 解析的真实地址），
-  但需进一步在 `DecodeAESBase64` 入口捕获寄存器以获得 key 字节。
+### 密钥提取方法（关键突破）
+1. **符号定位**：CatCore stripped 但保留 Go `.gopclntab`；用本机 Go 官方库 `debug/gosym`
+   （非 GoReSym，其 VA 有 +0x16B6160 偏差）精确解析出真实地址：
+   ```
+   convert.DecodeAESBase64    @ 0x1084b80 - 0x1084e60
+   convert.aesDecryptCBC      @ 0x1084e60 - 0x1085100   ← AES-CBC 核心（key/iv 为参数）
+   convert.DecryptConfig      @ 0x108d680 - 0x108d8c0
+   convert.DecodeObfuscatedBase64 @ 0x108dd20
+   ```
+2. **反汇编 `DecodeAESBase64`**（x86-64 静态可执行，objdump 直读）：key 以 `movabs` 立即数
+   写入栈/堆缓冲，逐段拼出两个 16 字节常量：
+   ```
+   1084bcd: movabs $0x6530366132323434  → "4422a60e"
+   1084bdc: movabs $0x3033663739633830  → "08c97f30"   ⇒ 栈区 key = "4422a60e08c97f30"
+   1084bff: movabs $0x3430336637396338  → "8c97f304"
+   1084c0c: movabs $0x3065303661323234  → "422a60e0"   ⇒ 堆区 iv  = "8c97f304422a60e0"
+   ```
+3. **实证**：node/openssl `aes-128-cbc` 解密第 ② 步密文 → 输出第 ③ 步 base64，二次解码即得合法 YAML。
+   （key/iv 互换会 PKCS#7 padding 校验失败，故顺序确定。）
 
-### 替代可行方案（无需解密）
-由于节点参数**高度规律且 password=UUID 已知**，通过以下组合即可生成可用配置：
-1. 登录 → 拿 `uuid`（=password）与 `token`
-2. `server/fetch` → 拿全部节点 id/name
-3. 结合已提取的 name→(server,port) 映射表（见 `fetch_sub_api.py`）生成标准 Clash YAML
+### 已知事实（原已确认）
+- 解密发生在 **CatCore**（魔改 mihomo，项目代号 **NetAPP**，编译路径
+  `/home/runner/work/NetAPP/NetAPP/core/Clash.Meta/common/convert/decrypt.go`）。
+  App 通过 Unix socket JSON-RPC `{"method":"getConfig","data":".../profiles/999999.yaml"}`
+  让 CatCore 读取密文文件后自行解密加载。
+- `DecryptConfig` 内部级联：`isYAMLConfig`（明文直通）→ `DecodeAESBase64`（AES 分支）→
+  `tryDecodeBase64` → `DecodeObfuscatedBase64`（反转码表分支，本后端未使用）。
+- 同类私有客户端（FastLink/白标，同为魔改 mihomo + 私有 DecryptConfig）在开源项目
+  `tatanakots/FuckPrivateClient` 中有同构逆向：其 AESKey=`29fe4156850dd48a`（**不通用**，
+  猫猫云 NetAPP 内核使用自己的常量，即上面提取的一对）。
+
+### 旧备选方案（已被完整解密取代，保留备查）
+在 key 未提取时曾用：登录拿 uuid（=password）+ `server/fetch` 拿节点名 +
+name→(server,port) 映射表拼 YAML —— 现在直接解密官方订阅即可，节点永不过期、无需维护映射表。
 
 ---
 
@@ -194,7 +220,63 @@ Host: 874441-ywvcq20ne9plstif.alidns.com
 ## 七、其他测试结论（避免重复劳动）
 
 - ❌ `/api/v1/client/subscribe`（v1）任何 UA/flag 均返回空 —— 服务端已关闭
-- ❌ v100 加任何 `flag=`/`client=`/`type=` 参数均返回同一密文
-- ❌ 加密非 gzip/zlib；AES-GCM/CTR 用 token/uuid/常见字符串派生密钥盲测未命中
+- ✅ **v100 解密后即官方标准配置**：任意 `flag=`/`client=`/`type=` 参数均返回同一密文，
+  因此**无需任何额外参数**，base64→AES→base64 即得标准 Clash YAML
+- ✅ 订阅密文对 Android 客户端（标准 mihomo 内核，无解密代码）与 Linux CatCore 返回**完全相同**
+  （342,680 B / 257,008 B 尺寸一致）→ 加密完全在服务端 + 内核端，与客户端版本无关
 - ✅ `server/fetch`、`user/getSubscribe`、`user/info` 等 `/api/v1/user/*` 接口**未被关闭**（需 JWT 直放 Authorization）
 - ✅ 订阅域名 `dy.maomaoapi.org` 与面板 `api.brfcdu.cn` 共享同一后端
+
+---
+
+## 八、Android 客户端 2.3.6 逆向（maomao2.3.6.apk）
+
+### 8.1 架构
+
+| 组件 | 说明 |
+|---|---|
+| 主包 `com.mt` | Kotlin/Java 业务（`com.mt.maomao`，versionName `2.3.6`） |
+| `com.github.kr328.clash.*` | **Kr328/ClashForAndroid** 魔改（服务/Profile/桥接层） |
+| `libbridge.so` (22KB) | JNI 桥接（`com.github.kr328.clash.core.bridge.Bridge`） |
+| `libclash.so` (47MB) | **标准 MetaCubeX mihomo**（Go 1.26.7，非 NetAPP fork） |
+| `libmmkv.so` | 腾讯 MMKV 本地存储 |
+| 资源 | assets 内置 `geoip.metadb`/`geosite.dat`/`ASN.mmdb`（GeoIP 库） |
+
+> ⚠️ 关键差异：安卓端内核是**标准 mihomo**，其 `common/convert` 包**没有** `DecryptConfig`/`DecodeAESBase64`
+> （pclntab 全量核对）；订阅解密实际**不发生在安卓端** —— 后端 v100 密文由服务端生成，
+> 解密参数（key/iv）固定在 **NetAPP(CatCore)** 内核中（见第五节），安卓端仅负责把订阅
+> **原样下载落盘**为 profile 交给标准内核加载（解密失败与否都不影响它运行，节点另有来源）。
+
+### 8.2 字符串混淆 StringFog（全部破解 ✅）
+
+- 所有敏感字符串经 `com.mt.StringFog` 混淆：`XOR(byte[], byte[])` 后按 UTF-8 解码（密钥循环异或）。
+- 已写自动化脚本（`/tmp/maomao236/stringfog_decrypt.py`）批量还原 **776+ 条字符串**。
+- 反编译符号常量：`Base64.padSymbol`=`'='`(0x3D)、`Utf8.REPLACEMENT_BYTE`=`'?'`(0x3F) 等。
+
+### 8.3 订阅流程（与 Linux 版同后端，确认一致）
+
+```
+1) POST /api/v1/passport/auth/login（email+password）→ token + auth_data(JWT)
+2) GET  /api/v1/user/getSubscribe  → SubBean{ token, uuid, subscribe_url, ... }
+   （uuid 即节点 password；字段与 Linux 版 getSubscribe 返回完全一致）
+3) 构造订阅 URL（URLKt）：
+   handleApiSub(subscribe_url) → subscribe_url + "/api/v100" + "/client/subscribe?token=" + token
+   关键：isMaomao() 时强制 path=/api/v100（StringFog 解密确认），绕过标准 /api/v1
+4) commitSubEncryptedUrlToFile：下载 v100 → 加密内容 → 落盘为 profile → 交内核
+   （函数名直译“提交加密 URL 到文件”；Android 端不自行解密）
+```
+
+### 8.4 静态发现（有价值线索）
+
+- `InterceptorKt`：动态 baseUrl 拦截器 + UA；普通 API 走 `/api/v1`（有 `/api/v1`→路径替换逻辑）。
+- `AESDecryptor`（Java，AES/CBC/PKCS5Padding）：**全 APK 无调用点**（dex 级确认死代码），
+  为白标 SDK 通用遗留，非安卓端实际解密路径。
+- `RetrofitHelper`：`Core.queryConfiguration(StringFog 长串)` 从**已加载配置**中按 key 提取
+  API 域名（`FC2DA1LM7...` 等 base64 串即配置内查询键）→ 印证“API host 藏在配置内”的设计。
+- `ProfileProcessor`：标准 V2Board `subscription-userinfo` 头解析，确认后端为 V2Board/Xboard 系。
+
+### 8.5 端到端实证（2026-09-02）
+
+用已知 token 直接请求 4 个 API host 的 v100 端点，全部返回 HTTP 200 + 342,680 B 密文；
+按第五节解密链路成功还原 105 节点标准配置。**结论：安卓 2.3.6 与 Linux 6.0.0 共享同一后端、
+同一加密订阅；第三方客户端接入只需实现“base64→AES→base64→YAML”即可，无需逆向任何 App。**
