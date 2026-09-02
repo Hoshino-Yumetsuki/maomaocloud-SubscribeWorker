@@ -19,9 +19,16 @@
 import sys
 import json
 import ssl
+import socket
 import base64
 import urllib.request
 import urllib.parse
+
+# ============ 猫猫云专用 DoH（节点私有域名解析） ============
+# 节点域名 (gtm-*.maomaogtm.com) 只在猫猫云的阿里云 PrivateZone 有记录，
+# 公网 DNS 解析不到/错误，必须用以下 DoH 解析：
+MAOMAO_DOH = "https://874441-ywvcq20ne9plstif.alidns.com/dns-query"
+# 备选：maomaodns3.com（猫猫云自建 DoH）
 
 # ============ 逆向提取的节点映射表（name -> 连接参数） ============
 # 来源：从 CatCore 运行内存提取的解密后明文节点（47 个）
@@ -153,9 +160,17 @@ dns:
   enable: true
   enhanced-mode: fake-ip
   fake-ip-range: 198.18.0.1/16
+  default-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
   nameserver:
+    - {MAOMAO_DOH}
     - https://doh.pub/dns-query
     - https://dns.alidns.com/dns-query
+  proxy-server-nameserver:
+    - {MAOMAO_DOH}
+  nameserver-policy:
+    "+.maomaogtm.com": {MAOMAO_DOH}
   fallback:
     - https://dns.google/dns-query
 
@@ -194,6 +209,67 @@ rules:
 """
 
 
+# 将节点 server 域名替换为真实 IP 的辅助函数（IP 来自猫猫云 DoH 解析）
+def _pub_doh(domain):
+    """用公共 DoH 解析域名（绕过 fake-ip），返回第一个 A 记录 IP"""
+    import json as _json
+    for d in ["https://223.5.5.5/resolve", "https://1.12.12.12/resolve"]:
+        try:
+            url = f"{d}?name={domain}&type=A"
+            req = urllib.request.Request(url, headers={"Accept": "application/dns-json"})
+            with urllib.request.urlopen(req, timeout=8, context=make_ctx()) as r:
+                j = _json.loads(r.read().decode())
+                ans = [a["data"] for a in j.get("Answer", []) if a.get("type") == 1]
+                if ans:
+                    return ans[0]
+        except Exception:
+            continue
+    return None
+
+
+def resolve_maomao_domain(domain):
+    """用猫猫云阿里云专属 DoH 解析节点域名，返回真实 IP"""
+    import struct
+    DOH_HOST = "874441-ywvcq20ne9plstif.alidns.com"
+    doh_ip = _pub_doh(DOH_HOST)  # 该域名解析到 223.5.5.5/223.6.6.6
+    if not doh_ip:
+        return None
+    qname = b"".join(bytes([len(p)]) + p.encode() for p in domain.split(".")) + b"\x00"
+    query = struct.pack(">HHHHHH", 0x2222, 0x0100, 1, 0, 0, 0) + qname + struct.pack(">HH", 1, 1)
+    b64 = base64.urlsafe_b64encode(query).decode().rstrip("=")
+    url = f"https://{doh_ip}/dns-query?dns={b64}"
+    req = urllib.request.Request(url, headers={"Accept": "application/dns-message", "Host": DOH_HOST})
+    try:
+        with urllib.request.urlopen(req, timeout=10, context=make_ctx()) as r:
+            data = r.read()
+            ancount = struct.unpack(">H", data[6:8])[0]
+            if ancount == 0:
+                return None
+            # 跳过 question
+            off = 12
+            while data[off] != 0:
+                off += data[off] + 1
+            off += 5
+            # 逐个解析 answer（含 CNAME），直到找到 A 记录
+            for _ in range(ancount):
+                if data[off] & 0xC0 == 0xC0:
+                    off += 2
+                else:
+                    while data[off] != 0:
+                        off += data[off] + 1
+                    off += 1
+                if off + 10 > len(data):
+                    break
+                rtype, _, _, rdlen = struct.unpack(">HHIH", data[off:off + 10])
+                off += 10
+                if rtype == 1 and rdlen == 4:
+                    return socket.inet_ntoa(data[off:off + 4])
+                off += rdlen
+    except Exception:
+        return None
+    return None
+
+
 def main():
     if len(sys.argv) < 3:
         print(__doc__)
@@ -222,13 +298,22 @@ def main():
     servers = sf.get("data") or []
     print(f"[+] 服务端节点 {len(servers)} 个")
 
-    # 用映射表生成节点（匹配上的）
+    # 用映射表生成节点（匹配上的），并把 server 域名解析为真实 IP
     nodes = []
+    resolved_ip = {}
     for s in servers:
         nm = s["name"]
         if nm in NODE_MAP:
             server, port = NODE_MAP[nm]
-            nodes.append({"name": nm, "server": server, "port": port, "password": uuid})
+            ip = resolved_ip.get(server)
+            if ip is None and server:
+                ip = resolve_maomao_domain(server)
+                resolved_ip[server] = ip
+                if ip:
+                    print(f"[+] {server} -> {ip}")
+                else:
+                    print(f"[!] {server} 解析失败，将依赖 DNS 配置")
+            nodes.append({"name": nm, "server": ip or server, "port": port, "password": uuid})
     print(f"[*] 映射到 {len(nodes)} 个可用节点")
 
     if not nodes:

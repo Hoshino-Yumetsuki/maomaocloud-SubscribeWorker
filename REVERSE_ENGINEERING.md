@@ -163,7 +163,35 @@ App 加载后喂给 CatCore 的节点为标准 mihomo anytls 格式：
 
 ---
 
-## 六、其他测试结论（避免重复劳动）
+## 六、⭐ 节点域名解析的关键（必须用猫猫云 DoH）
+
+**节点 `server` 域名（`gtm-*.maomaogtm.com`）是私有域名**，只注册在猫猫云的阿里云 PrivateZone 实例中。**公网 DNS 解析不到/解析到错误 IP**（会得到被墙的美国 IP 如 154.23.160.4），导致直连全部超时。
+
+**正确解析方式**（已验证）——使用阿里云专属 DoH：
+```
+DoH 端点: https://874441-ywvcq20ne9plstif.alidns.com/dns-query   (RFC 8484)
+          （该域名解析到 223.5.5.5 / 223.6.6.6）
+Host: 874441-ywvcq20ne9plstif.alidns.com
+```
+查询示例（RFC8484 GET）：`/dns-query?dns=<urlsafe base64 的 DNS 查询包>`
+
+解析结果（**IP 动态轮换**）：
+| 节点域名 | 真实入口 IP | 属地 |
+|---|---|---|
+| `gtm-sg-nnu4tneapp20g.maomaogtm.com`（主力 HK/各国） | 125.94.244.159 / 103.236.65.23 等 | 🇨🇳 广州电信（国内中转） |
+| `gtm-sg-d6a4tnfxt21gzl.maomaogtm.com`（0.5x 直连） | 2.27.146.100 | 🇺🇸 洛杉矶 |
+| `us.maomaogtm.com`（美国） | 2.27.146.5 | 🇺🇸 洛杉矶 |
+
+> ⚠️ IP 会变化（DoH 返回多 A 轮换），**必须每次解析最新 IP**（见 `fetch_sub_api.py` 的 `resolve_maomao_domain`）。
+> 另注：CatCore 内存中出现的 `maomaodns3.com` 也是猫猫云自建 DoH。
+
+**落地到 Clash 配置的两种方式**（脚本已同时采用）：
+1. `server:` 直接填解析出的真实 IP
+2. DNS 配置 `nameserver`/`proxy-server-nameserver`/`nameserver-policy "+.maomaogtm.com"` 指向猫猫云 DoH
+
+---
+
+## 七、其他测试结论（避免重复劳动）
 
 - ❌ `/api/v1/client/subscribe`（v1）任何 UA/flag 均返回空 —— 服务端已关闭
 - ❌ v100 加任何 `flag=`/`client=`/`type=` 参数均返回同一密文

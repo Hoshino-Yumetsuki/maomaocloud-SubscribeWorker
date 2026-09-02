@@ -1,5 +1,4 @@
-# 猫猫云 MaoMaoCloud - FlClash 配置
-# 生成时间: 2026-09-02 | 节点数: 47
+# 猫猫云 MaoMaoCloud - 自动生成 (节点数 39)
 mixed-port: 7890
 allow-lan: false
 mode: rule
@@ -8,26 +7,38 @@ ipv6: true
 external-controller: 127.0.0.1:9090
 dns:
   enable: true
-  listen: 0.0.0.0:1053
-  ipv6: false
   enhanced-mode: fake-ip
   fake-ip-range: 198.18.0.1/16
-  fake-ip-filter:
-    - "*.lan"
-    - "localhost.ptlogin2.qq.com"
   default-nameserver:
     - 223.5.5.5
+    - 119.29.29.29
   nameserver:
+    - https://874441-ywvcq20ne9plstif.alidns.com/dns-query
     - https://doh.pub/dns-query
     - https://dns.alidns.com/dns-query
+  proxy-server-nameserver:
+    - https://874441-ywvcq20ne9plstif.alidns.com/dns-query
+  nameserver-policy:
+    "+.maomaogtm.com": https://874441-ywvcq20ne9plstif.alidns.com/dns-query
   fallback:
     - https://dns.google/dns-query
-    - https://cloudflare-dns.com/dns-query
 
 proxies:
+  - name: "1.0x 🇭🇰 香港 HK - 家宽"
+    type: anytls
+    server: 125.94.244.159
+    port: 59999
+    password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
+    udp: true
+    sni: osxapps.itunes.apple.com
+    skip-cert-verify: true
+    client-fingerprint: chrome
+    alpn:
+      - "h2"
+      - "http/1.1"
   - name: "1.0x 🇭🇰 香港 HK - 9"
     type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
+    server: 125.94.244.159
     port: 60008
     password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
     udp: true
@@ -39,7 +50,7 @@ proxies:
       - "http/1.1"
   - name: "1.0x 🇭🇰 香港 HK - 10"
     type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
+    server: 125.94.244.159
     port: 60009
     password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
     udp: true
@@ -51,7 +62,7 @@ proxies:
       - "http/1.1"
   - name: "1.0x 🇯🇵 日本 JP - 9"
     type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
+    server: 125.94.244.159
     port: 60152
     password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
     udp: true
@@ -63,7 +74,7 @@ proxies:
       - "http/1.1"
   - name: "1.0x 🇯🇵 日本 JP - 10"
     type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
+    server: 125.94.244.159
     port: 60153
     password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
     udp: true
@@ -75,7 +86,7 @@ proxies:
       - "http/1.1"
   - name: "1.0x 🇸🇬 新加坡 SG - 3"
     type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
+    server: 125.94.244.159
     port: 60160
     password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
     udp: true
@@ -87,7 +98,7 @@ proxies:
       - "http/1.1"
   - name: "1.0x 🇸🇬 新加坡 SG - 4"
     type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
+    server: 125.94.244.159
     port: 60161
     password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
     udp: true
@@ -99,7 +110,7 @@ proxies:
       - "http/1.1"
   - name: "0.5x 🇸🇬 新加坡直连 SG - 17"
     type: anytls
-    server: gtm-sg-d6a4tnfxt21gzl.maomaogtm.com
+    server: 2.27.146.100
     port: 50022
     password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
     udp: true
@@ -111,236 +122,8 @@ proxies:
       - "http/1.1"
   - name: "0.5x 🇸🇬 新加坡直连 SG - 18"
     type: anytls
-    server: gtm-sg-d6a4tnfxt21gzl.maomaogtm.com
+    server: 2.27.146.100
     port: 50023
-    password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
-    udp: true
-    sni: osxapps.itunes.apple.com
-    skip-cert-verify: true
-    client-fingerprint: chrome
-    alpn:
-      - "h2"
-      - "http/1.1"
-  - name: "0.5x 🇺🇸 美国直连 US - 12"
-    type: anytls
-    server: gtm-sg-d6a4tnfxt21gzl.maomaogtm.com
-    port: 50007
-    password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
-    udp: true
-    sni: osxapps.itunes.apple.com
-    skip-cert-verify: true
-    client-fingerprint: chrome
-    alpn:
-      - "h2"
-      - "http/1.1"
-  - name: "0.5x 🇺🇸 美国直连 US - 13"
-    type: anytls
-    server: gtm-sg-d6a4tnfxt21gzl.maomaogtm.com
-    port: 50008
-    password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
-    udp: true
-    sni: osxapps.itunes.apple.com
-    skip-cert-verify: true
-    client-fingerprint: chrome
-    alpn:
-      - "h2"
-      - "http/1.1"
-  - name: "0.5x 🇺🇸 美国直连 US - 14"
-    type: anytls
-    server: gtm-sg-d6a4tnfxt21gzl.maomaogtm.com
-    port: 50009
-    password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
-    udp: true
-    sni: osxapps.itunes.apple.com
-    skip-cert-verify: true
-    client-fingerprint: chrome
-    alpn:
-      - "h2"
-      - "http/1.1"
-  - name: "1.0x 🇬🇷 希腊 GR - 1"
-    type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
-    port: 60108
-    password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
-    udp: true
-    sni: osxapps.itunes.apple.com
-    skip-cert-verify: true
-    client-fingerprint: chrome
-    alpn:
-      - "h2"
-      - "http/1.1"
-  - name: "1.0x 🇮🇳 印度 IN - 1"
-    type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
-    port: 60109
-    password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
-    udp: true
-    sni: osxapps.itunes.apple.com
-    skip-cert-verify: true
-    client-fingerprint: chrome
-    alpn:
-      - "h2"
-      - "http/1.1"
-  - name: "1.0x 🇹🇷 土耳其 TR - 1"
-    type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
-    port: 60122
-    password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
-    udp: true
-    sni: osxapps.itunes.apple.com
-    skip-cert-verify: true
-    client-fingerprint: chrome
-    alpn:
-      - "h2"
-      - "http/1.1"
-  - name: "1.0x 🇦🇺 澳大利亚 AU - 1"
-    type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
-    port: 60123
-    password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
-    udp: true
-    sni: osxapps.itunes.apple.com
-    skip-cert-verify: true
-    client-fingerprint: chrome
-    alpn:
-      - "h2"
-      - "http/1.1"
-  - name: "1.0x 🇲🇾 马来西亚 MY - 1"
-    type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
-    port: 60124
-    password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
-    udp: true
-    sni: osxapps.itunes.apple.com
-    skip-cert-verify: true
-    client-fingerprint: chrome
-    alpn:
-      - "h2"
-      - "http/1.1"
-  - name: "1.0x 🇵🇰 巴基斯坦 PK - 1"
-    type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
-    port: 60125
-    password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
-    udp: true
-    sni: osxapps.itunes.apple.com
-    skip-cert-verify: true
-    client-fingerprint: chrome
-    alpn:
-      - "h2"
-      - "http/1.1"
-  - name: "1.0x 🇮🇩 印度尼西亚 ID - 1"
-    type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
-    port: 50011
-    password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
-    udp: true
-    sni: osxapps.itunes.apple.com
-    skip-cert-verify: true
-    client-fingerprint: chrome
-    alpn:
-      - "h2"
-      - "http/1.1"
-  - name: "1.0x 🇭🇰 香港 HK - 1"
-    type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
-    port: 60000
-    password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
-    udp: true
-    sni: osxapps.itunes.apple.com
-    skip-cert-verify: true
-    client-fingerprint: chrome
-    alpn:
-      - "h2"
-      - "http/1.1"
-  - name: "1.0x 🇭🇰 香港 HK - 2"
-    type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
-    port: 60001
-    password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
-    udp: true
-    sni: osxapps.itunes.apple.com
-    skip-cert-verify: true
-    client-fingerprint: chrome
-    alpn:
-      - "h2"
-      - "http/1.1"
-  - name: "1.0x 🇭🇰 香港 HK - 3"
-    type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
-    port: 60002
-    password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
-    udp: true
-    sni: osxapps.itunes.apple.com
-    skip-cert-verify: true
-    client-fingerprint: chrome
-    alpn:
-      - "h2"
-      - "http/1.1"
-  - name: "1.0x 🇭🇰 香港 HK - 4"
-    type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
-    port: 60003
-    password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
-    udp: true
-    sni: osxapps.itunes.apple.com
-    skip-cert-verify: true
-    client-fingerprint: chrome
-    alpn:
-      - "h2"
-      - "http/1.1"
-  - name: "1.0x 🇭🇰 香港 HK - 5"
-    type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
-    port: 60004
-    password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
-    udp: true
-    sni: osxapps.itunes.apple.com
-    skip-cert-verify: true
-    client-fingerprint: chrome
-    alpn:
-      - "h2"
-      - "http/1.1"
-  - name: "1.0x 🇭🇰 香港 HK - 家宽"
-    type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
-    port: 59999
-    password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
-    udp: true
-    sni: osxapps.itunes.apple.com
-    skip-cert-verify: true
-    client-fingerprint: chrome
-    alpn:
-      - "h2"
-      - "http/1.1"
-  - name: "1.0x 🇭🇰 香港 HK - 6"
-    type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
-    port: 60005
-    password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
-    udp: true
-    sni: osxapps.itunes.apple.com
-    skip-cert-verify: true
-    client-fingerprint: chrome
-    alpn:
-      - "h2"
-      - "http/1.1"
-  - name: "1.0x 🇭🇰 香港 HK - 7"
-    type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
-    port: 60006
-    password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
-    udp: true
-    sni: osxapps.itunes.apple.com
-    skip-cert-verify: true
-    client-fingerprint: chrome
-    alpn:
-      - "h2"
-      - "http/1.1"
-  - name: "1.0x 🇭🇰 香港 HK - 8"
-    type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
-    port: 60007
     password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
     udp: true
     sni: osxapps.itunes.apple.com
@@ -351,7 +134,7 @@ proxies:
       - "http/1.1"
   - name: "1.0x 🇺🇸 美国 US - 7"
     type: anytls
-    server: us.maomaogtm.com
+    server: 2.27.146.5
     port: 60135
     password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
     udp: true
@@ -363,7 +146,7 @@ proxies:
       - "http/1.1"
   - name: "1.0x 🇺🇸 美国 US - 8"
     type: anytls
-    server: us.maomaogtm.com
+    server: 2.27.146.5
     port: 60136
     password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
     udp: true
@@ -375,7 +158,7 @@ proxies:
       - "http/1.1"
   - name: "1.0x 🇺🇸 美国 US - 9"
     type: anytls
-    server: us.maomaogtm.com
+    server: 2.27.146.5
     port: 60137
     password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
     udp: true
@@ -387,7 +170,7 @@ proxies:
       - "http/1.1"
   - name: "1.0x 🇺🇸 美国 US - 10"
     type: anytls
-    server: us.maomaogtm.com
+    server: 2.27.146.5
     port: 60138
     password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
     udp: true
@@ -399,8 +182,44 @@ proxies:
       - "http/1.1"
   - name: "0.5x 🇺🇸 美国直连 US - 11"
     type: anytls
-    server: gtm-sg-d6a4tnfxt21gzl.maomaogtm.com
+    server: 2.27.146.100
     port: 50006
+    password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
+    udp: true
+    sni: osxapps.itunes.apple.com
+    skip-cert-verify: true
+    client-fingerprint: chrome
+    alpn:
+      - "h2"
+      - "http/1.1"
+  - name: "0.5x 🇺🇸 美国直连 US - 12"
+    type: anytls
+    server: 2.27.146.100
+    port: 50007
+    password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
+    udp: true
+    sni: osxapps.itunes.apple.com
+    skip-cert-verify: true
+    client-fingerprint: chrome
+    alpn:
+      - "h2"
+      - "http/1.1"
+  - name: "0.5x 🇺🇸 美国直连 US - 13"
+    type: anytls
+    server: 2.27.146.100
+    port: 50008
+    password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
+    udp: true
+    sni: osxapps.itunes.apple.com
+    skip-cert-verify: true
+    client-fingerprint: chrome
+    alpn:
+      - "h2"
+      - "http/1.1"
+  - name: "0.5x 🇺🇸 美国直连 US - 14"
+    type: anytls
+    server: 2.27.146.100
+    port: 50009
     password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
     udp: true
     sni: osxapps.itunes.apple.com
@@ -411,7 +230,7 @@ proxies:
       - "http/1.1"
   - name: "0.5x 🇺🇸 美国直连 US - 15"
     type: anytls
-    server: gtm-sg-d6a4tnfxt21gzl.maomaogtm.com
+    server: 2.27.146.100
     port: 50010
     password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
     udp: true
@@ -423,7 +242,7 @@ proxies:
       - "http/1.1"
   - name: "1.0x 🇨🇳 台湾 TW - 1"
     type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
+    server: 125.94.244.159
     port: 60126
     password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
     udp: true
@@ -435,7 +254,7 @@ proxies:
       - "http/1.1"
   - name: "1.0x 🇨🇳 台湾 TW - 2"
     type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
+    server: 125.94.244.159
     port: 60127
     password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
     udp: true
@@ -447,7 +266,7 @@ proxies:
       - "http/1.1"
   - name: "1.0x 🇨🇳 台湾 TW - 3"
     type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
+    server: 125.94.244.159
     port: 60128
     password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
     udp: true
@@ -459,7 +278,7 @@ proxies:
       - "http/1.1"
   - name: "1.0x 🇰🇷 韩国 KR - 1"
     type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
+    server: 125.94.244.159
     port: 60100
     password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
     udp: true
@@ -471,7 +290,7 @@ proxies:
       - "http/1.1"
   - name: "1.0x 🇫🇷 法国 FR - 1"
     type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
+    server: 125.94.244.159
     port: 60101
     password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
     udp: true
@@ -483,7 +302,7 @@ proxies:
       - "http/1.1"
   - name: "1.0x 🇩🇪 德国 DE - 1"
     type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
+    server: 125.94.244.159
     port: 60102
     password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
     udp: true
@@ -495,7 +314,7 @@ proxies:
       - "http/1.1"
   - name: "1.0x 🇬🇧 英国 UK - 1"
     type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
+    server: 125.94.244.159
     port: 60103
     password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
     udp: true
@@ -507,7 +326,7 @@ proxies:
       - "http/1.1"
   - name: "1.0x 🇦🇪 迪拜 AE - 1"
     type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
+    server: 125.94.244.159
     port: 60104
     password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
     udp: true
@@ -519,8 +338,32 @@ proxies:
       - "http/1.1"
   - name: "1.0x 🇧🇷 巴西 BR - 1"
     type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
+    server: 125.94.244.159
     port: 60105
+    password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
+    udp: true
+    sni: osxapps.itunes.apple.com
+    skip-cert-verify: true
+    client-fingerprint: chrome
+    alpn:
+      - "h2"
+      - "http/1.1"
+  - name: "1.0x 🇬🇷 希腊 GR - 1"
+    type: anytls
+    server: 125.94.244.159
+    port: 60108
+    password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
+    udp: true
+    sni: osxapps.itunes.apple.com
+    skip-cert-verify: true
+    client-fingerprint: chrome
+    alpn:
+      - "h2"
+      - "http/1.1"
+  - name: "1.0x 🇮🇳 印度 IN - 1"
+    type: anytls
+    server: 125.94.244.159
+    port: 60109
     password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
     udp: true
     sni: osxapps.itunes.apple.com
@@ -531,7 +374,7 @@ proxies:
       - "http/1.1"
   - name: "1.0x 🇧🇪 比利时 BE - 1"
     type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
+    server: 125.94.244.159
     port: 60114
     password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
     udp: true
@@ -543,7 +386,7 @@ proxies:
       - "http/1.1"
   - name: "1.0x 🇦🇷 阿根廷 AR - 1"
     type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
+    server: 125.94.244.159
     port: 60115
     password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
     udp: true
@@ -555,7 +398,7 @@ proxies:
       - "http/1.1"
   - name: "1.0x 🇲🇽 墨西哥 MX - 1"
     type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
+    server: 125.94.244.159
     port: 60116
     password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
     udp: true
@@ -567,7 +410,7 @@ proxies:
       - "http/1.1"
   - name: "1.0x 🇮🇪 爱尔兰 IE - 1"
     type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
+    server: 125.94.244.159
     port: 60117
     password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
     udp: true
@@ -579,8 +422,68 @@ proxies:
       - "http/1.1"
   - name: "1.0x 🇵🇭 菲律宾 PH - 1"
     type: anytls
-    server: gtm-sg-nnu4tneapp20g.maomaogtm.com
+    server: 125.94.244.159
     port: 60118
+    password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
+    udp: true
+    sni: osxapps.itunes.apple.com
+    skip-cert-verify: true
+    client-fingerprint: chrome
+    alpn:
+      - "h2"
+      - "http/1.1"
+  - name: "1.0x 🇹🇷 土耳其 TR - 1"
+    type: anytls
+    server: 125.94.244.159
+    port: 60122
+    password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
+    udp: true
+    sni: osxapps.itunes.apple.com
+    skip-cert-verify: true
+    client-fingerprint: chrome
+    alpn:
+      - "h2"
+      - "http/1.1"
+  - name: "1.0x 🇦🇺 澳大利亚 AU - 1"
+    type: anytls
+    server: 125.94.244.159
+    port: 60123
+    password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
+    udp: true
+    sni: osxapps.itunes.apple.com
+    skip-cert-verify: true
+    client-fingerprint: chrome
+    alpn:
+      - "h2"
+      - "http/1.1"
+  - name: "1.0x 🇲🇾 马来西亚 MY - 1"
+    type: anytls
+    server: 125.94.244.159
+    port: 60124
+    password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
+    udp: true
+    sni: osxapps.itunes.apple.com
+    skip-cert-verify: true
+    client-fingerprint: chrome
+    alpn:
+      - "h2"
+      - "http/1.1"
+  - name: "1.0x 🇵🇰 巴基斯坦 PK - 1"
+    type: anytls
+    server: 125.94.244.159
+    port: 60125
+    password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
+    udp: true
+    sni: osxapps.itunes.apple.com
+    skip-cert-verify: true
+    client-fingerprint: chrome
+    alpn:
+      - "h2"
+      - "http/1.1"
+  - name: "1.0x 🇮🇩 印度尼西亚 ID - 1"
+    type: anytls
+    server: 125.94.244.159
+    port: 50011
     password: "913ee7f4-5c20-45cc-ba18-388275bdb764"
     udp: true
     sni: osxapps.itunes.apple.com
@@ -596,6 +499,7 @@ proxy-groups:
     proxies:
       - ♻️ 自动选择
       - DIRECT
+      - "1.0x 🇭🇰 香港 HK - 家宽"
       - "1.0x 🇭🇰 香港 HK - 9"
       - "1.0x 🇭🇰 香港 HK - 10"
       - "1.0x 🇯🇵 日本 JP - 9"
@@ -604,30 +508,14 @@ proxy-groups:
       - "1.0x 🇸🇬 新加坡 SG - 4"
       - "0.5x 🇸🇬 新加坡直连 SG - 17"
       - "0.5x 🇸🇬 新加坡直连 SG - 18"
-      - "0.5x 🇺🇸 美国直连 US - 12"
-      - "0.5x 🇺🇸 美国直连 US - 13"
-      - "0.5x 🇺🇸 美国直连 US - 14"
-      - "1.0x 🇬🇷 希腊 GR - 1"
-      - "1.0x 🇮🇳 印度 IN - 1"
-      - "1.0x 🇹🇷 土耳其 TR - 1"
-      - "1.0x 🇦🇺 澳大利亚 AU - 1"
-      - "1.0x 🇲🇾 马来西亚 MY - 1"
-      - "1.0x 🇵🇰 巴基斯坦 PK - 1"
-      - "1.0x 🇮🇩 印度尼西亚 ID - 1"
-      - "1.0x 🇭🇰 香港 HK - 1"
-      - "1.0x 🇭🇰 香港 HK - 2"
-      - "1.0x 🇭🇰 香港 HK - 3"
-      - "1.0x 🇭🇰 香港 HK - 4"
-      - "1.0x 🇭🇰 香港 HK - 5"
-      - "1.0x 🇭🇰 香港 HK - 家宽"
-      - "1.0x 🇭🇰 香港 HK - 6"
-      - "1.0x 🇭🇰 香港 HK - 7"
-      - "1.0x 🇭🇰 香港 HK - 8"
       - "1.0x 🇺🇸 美国 US - 7"
       - "1.0x 🇺🇸 美国 US - 8"
       - "1.0x 🇺🇸 美国 US - 9"
       - "1.0x 🇺🇸 美国 US - 10"
       - "0.5x 🇺🇸 美国直连 US - 11"
+      - "0.5x 🇺🇸 美国直连 US - 12"
+      - "0.5x 🇺🇸 美国直连 US - 13"
+      - "0.5x 🇺🇸 美国直连 US - 14"
       - "0.5x 🇺🇸 美国直连 US - 15"
       - "1.0x 🇨🇳 台湾 TW - 1"
       - "1.0x 🇨🇳 台湾 TW - 2"
@@ -638,18 +526,25 @@ proxy-groups:
       - "1.0x 🇬🇧 英国 UK - 1"
       - "1.0x 🇦🇪 迪拜 AE - 1"
       - "1.0x 🇧🇷 巴西 BR - 1"
+      - "1.0x 🇬🇷 希腊 GR - 1"
+      - "1.0x 🇮🇳 印度 IN - 1"
       - "1.0x 🇧🇪 比利时 BE - 1"
       - "1.0x 🇦🇷 阿根廷 AR - 1"
       - "1.0x 🇲🇽 墨西哥 MX - 1"
       - "1.0x 🇮🇪 爱尔兰 IE - 1"
       - "1.0x 🇵🇭 菲律宾 PH - 1"
-
+      - "1.0x 🇹🇷 土耳其 TR - 1"
+      - "1.0x 🇦🇺 澳大利亚 AU - 1"
+      - "1.0x 🇲🇾 马来西亚 MY - 1"
+      - "1.0x 🇵🇰 巴基斯坦 PK - 1"
+      - "1.0x 🇮🇩 印度尼西亚 ID - 1"
   - name: ♻️ 自动选择
     type: url-test
     url: http://cp.cloudflare.com/generate_204
     interval: 300
     tolerance: 50
     proxies:
+      - "1.0x 🇭🇰 香港 HK - 家宽"
       - "1.0x 🇭🇰 香港 HK - 9"
       - "1.0x 🇭🇰 香港 HK - 10"
       - "1.0x 🇯🇵 日本 JP - 9"
@@ -658,30 +553,14 @@ proxy-groups:
       - "1.0x 🇸🇬 新加坡 SG - 4"
       - "0.5x 🇸🇬 新加坡直连 SG - 17"
       - "0.5x 🇸🇬 新加坡直连 SG - 18"
-      - "0.5x 🇺🇸 美国直连 US - 12"
-      - "0.5x 🇺🇸 美国直连 US - 13"
-      - "0.5x 🇺🇸 美国直连 US - 14"
-      - "1.0x 🇬🇷 希腊 GR - 1"
-      - "1.0x 🇮🇳 印度 IN - 1"
-      - "1.0x 🇹🇷 土耳其 TR - 1"
-      - "1.0x 🇦🇺 澳大利亚 AU - 1"
-      - "1.0x 🇲🇾 马来西亚 MY - 1"
-      - "1.0x 🇵🇰 巴基斯坦 PK - 1"
-      - "1.0x 🇮🇩 印度尼西亚 ID - 1"
-      - "1.0x 🇭🇰 香港 HK - 1"
-      - "1.0x 🇭🇰 香港 HK - 2"
-      - "1.0x 🇭🇰 香港 HK - 3"
-      - "1.0x 🇭🇰 香港 HK - 4"
-      - "1.0x 🇭🇰 香港 HK - 5"
-      - "1.0x 🇭🇰 香港 HK - 家宽"
-      - "1.0x 🇭🇰 香港 HK - 6"
-      - "1.0x 🇭🇰 香港 HK - 7"
-      - "1.0x 🇭🇰 香港 HK - 8"
       - "1.0x 🇺🇸 美国 US - 7"
       - "1.0x 🇺🇸 美国 US - 8"
       - "1.0x 🇺🇸 美国 US - 9"
       - "1.0x 🇺🇸 美国 US - 10"
       - "0.5x 🇺🇸 美国直连 US - 11"
+      - "0.5x 🇺🇸 美国直连 US - 12"
+      - "0.5x 🇺🇸 美国直连 US - 13"
+      - "0.5x 🇺🇸 美国直连 US - 14"
       - "0.5x 🇺🇸 美国直连 US - 15"
       - "1.0x 🇨🇳 台湾 TW - 1"
       - "1.0x 🇨🇳 台湾 TW - 2"
@@ -692,17 +571,24 @@ proxy-groups:
       - "1.0x 🇬🇧 英国 UK - 1"
       - "1.0x 🇦🇪 迪拜 AE - 1"
       - "1.0x 🇧🇷 巴西 BR - 1"
+      - "1.0x 🇬🇷 希腊 GR - 1"
+      - "1.0x 🇮🇳 印度 IN - 1"
       - "1.0x 🇧🇪 比利时 BE - 1"
       - "1.0x 🇦🇷 阿根廷 AR - 1"
       - "1.0x 🇲🇽 墨西哥 MX - 1"
       - "1.0x 🇮🇪 爱尔兰 IE - 1"
       - "1.0x 🇵🇭 菲律宾 PH - 1"
-
+      - "1.0x 🇹🇷 土耳其 TR - 1"
+      - "1.0x 🇦🇺 澳大利亚 AU - 1"
+      - "1.0x 🇲🇾 马来西亚 MY - 1"
+      - "1.0x 🇵🇰 巴基斯坦 PK - 1"
+      - "1.0x 🇮🇩 印度尼西亚 ID - 1"
   - name: 🎯 故障转移
     type: fallback
     url: http://cp.cloudflare.com/generate_204
     interval: 300
     proxies:
+      - "1.0x 🇭🇰 香港 HK - 家宽"
       - "1.0x 🇭🇰 香港 HK - 9"
       - "1.0x 🇭🇰 香港 HK - 10"
       - "1.0x 🇯🇵 日本 JP - 9"
@@ -711,30 +597,14 @@ proxy-groups:
       - "1.0x 🇸🇬 新加坡 SG - 4"
       - "0.5x 🇸🇬 新加坡直连 SG - 17"
       - "0.5x 🇸🇬 新加坡直连 SG - 18"
-      - "0.5x 🇺🇸 美国直连 US - 12"
-      - "0.5x 🇺🇸 美国直连 US - 13"
-      - "0.5x 🇺🇸 美国直连 US - 14"
-      - "1.0x 🇬🇷 希腊 GR - 1"
-      - "1.0x 🇮🇳 印度 IN - 1"
-      - "1.0x 🇹🇷 土耳其 TR - 1"
-      - "1.0x 🇦🇺 澳大利亚 AU - 1"
-      - "1.0x 🇲🇾 马来西亚 MY - 1"
-      - "1.0x 🇵🇰 巴基斯坦 PK - 1"
-      - "1.0x 🇮🇩 印度尼西亚 ID - 1"
-      - "1.0x 🇭🇰 香港 HK - 1"
-      - "1.0x 🇭🇰 香港 HK - 2"
-      - "1.0x 🇭🇰 香港 HK - 3"
-      - "1.0x 🇭🇰 香港 HK - 4"
-      - "1.0x 🇭🇰 香港 HK - 5"
-      - "1.0x 🇭🇰 香港 HK - 家宽"
-      - "1.0x 🇭🇰 香港 HK - 6"
-      - "1.0x 🇭🇰 香港 HK - 7"
-      - "1.0x 🇭🇰 香港 HK - 8"
       - "1.0x 🇺🇸 美国 US - 7"
       - "1.0x 🇺🇸 美国 US - 8"
       - "1.0x 🇺🇸 美国 US - 9"
       - "1.0x 🇺🇸 美国 US - 10"
       - "0.5x 🇺🇸 美国直连 US - 11"
+      - "0.5x 🇺🇸 美国直连 US - 12"
+      - "0.5x 🇺🇸 美国直连 US - 13"
+      - "0.5x 🇺🇸 美国直连 US - 14"
       - "0.5x 🇺🇸 美国直连 US - 15"
       - "1.0x 🇨🇳 台湾 TW - 1"
       - "1.0x 🇨🇳 台湾 TW - 2"
@@ -745,12 +615,18 @@ proxy-groups:
       - "1.0x 🇬🇧 英国 UK - 1"
       - "1.0x 🇦🇪 迪拜 AE - 1"
       - "1.0x 🇧🇷 巴西 BR - 1"
+      - "1.0x 🇬🇷 希腊 GR - 1"
+      - "1.0x 🇮🇳 印度 IN - 1"
       - "1.0x 🇧🇪 比利时 BE - 1"
       - "1.0x 🇦🇷 阿根廷 AR - 1"
       - "1.0x 🇲🇽 墨西哥 MX - 1"
       - "1.0x 🇮🇪 爱尔兰 IE - 1"
       - "1.0x 🇵🇭 菲律宾 PH - 1"
-
+      - "1.0x 🇹🇷 土耳其 TR - 1"
+      - "1.0x 🇦🇺 澳大利亚 AU - 1"
+      - "1.0x 🇲🇾 马来西亚 MY - 1"
+      - "1.0x 🇵🇰 巴基斯坦 PK - 1"
+      - "1.0x 🇮🇩 印度尼西亚 ID - 1"
   - name: 🐟 漏网之鱼
     type: select
     proxies:
