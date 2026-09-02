@@ -1,45 +1,3 @@
-/**
- * MaoMaoCloud Subscribe Worker (TypeScript)
- *
- * 猫猫云(MaoMaoCloud)订阅桥接 Worker —— 生成可在 FlClash / Clash Verge / Mihomo 使用的标准订阅。
- *
- * 原理（详见 REVERSE_ENGINEERING.md）:
- *   1. 登录猫猫云 V2Board 后端获取 JWT (auth_data)
- *   2. getSubscribe 拿用户 UUID（= anytls 节点密码）
- *   3. server/fetch 拿节点列表，与逆向提取的节点映射表匹配
- *   4. 用猫猫云阿里云 PrivateZone DoH 解析节点私有域名的动态真实 IP
- *   5. 输出标准 Clash YAML
- *
- * Secrets (wrangler secret put):
- *   MAOMAO_EMAIL    猫猫云账号邮箱
- *   MAOMAO_PASSWORD 猫猫云账号密码
- *   MAOMAO_HOST     猫猫云 API 域名（可选，默认 https://api.brfcdu.cn）
- */
-
-interface Env {
-  MAOMAO_EMAIL?: string;
-  MAOMAO_PASSWORD?: string;
-  MAOMAO_HOST?: string;
-}
-
-interface NodeDef {
-  name: string;
-  server: string;
-  port: number;
-  password: string;
-}
-
-interface ServerMeta {
-  id?: number;
-  name?: string;
-  type?: string;
-  tags?: string[];
-}
-
-// ---------------------------------------------------------------------------
-// 逆向提取的节点映射表（name -> [server域名, port]）
-// 来源：CatCore 内核内存中解密后的真实节点（电脑端官方 App 加载的全部节点）
-// ---------------------------------------------------------------------------
 const NODE_MAP: Record<string, [string, number]> = {
   "1.0x 🇭🇰 香港 HK - 9": ["gtm-sg-nnu4tneapp20g.maomaogtm.com", 60008],
   "1.0x 🇭🇰 香港 HK - 10": ["gtm-sg-nnu4tneapp20g.maomaogtm.com", 60009],
@@ -82,17 +40,25 @@ const NODE_MAP: Record<string, [string, number]> = {
   "1.0x 🇺🇸 美国 US - 10": ["us.maomaogtm.com", 60138],
 };
 
-/** 猫猫云阿里云 PrivateZone DoH（解析节点私有域名真实 IP） */
+const API_HOSTS = [
+  "https://api.brfcdu.cn",
+  "https://mmyapi.lnnrhtp.com",
+  "https://app.maomao234.com",
+  "https://dy.maomaoapi.org",
+];
 const MAOMAO_DOH_HOST = "874441-ywvcq20ne9plstif.alidns.com";
 const UA = "Mozilla/5.0 (dart:io) SuperAccelerator";
 const SNI = "osxapps.itunes.apple.com";
 
-// 只读缓存：server 域名 -> 解析出的真实 IP（模块级只读，无请求态污染）
 const ipCache = new Map<string, string>();
 
-// ---------------------------------------------------------------------------
-// 字节工具（纯 Web API，无 Node Buffer）
-// ---------------------------------------------------------------------------
+interface NodeDef {
+  name: string;
+  server: string;
+  port: number;
+  password: string;
+}
+
 function concatBytes(...arrays: Uint8Array[]): Uint8Array {
   const total = arrays.reduce((n, a) => n + a.length, 0);
   const out = new Uint8Array(total);
@@ -114,7 +80,6 @@ function readU16(buf: Uint8Array, off: number): number {
   return (buf[off] << 8) | buf[off + 1];
 }
 
-/** 构造 RFC8484 DNS A 查询载荷 */
 function buildDnsQuery(domain: string): Uint8Array {
   const labels = domain.split(".").map((p) => {
     const label = new Uint8Array(p.length + 1);
@@ -123,13 +88,11 @@ function buildDnsQuery(domain: string): Uint8Array {
     return label;
   });
   const qname = concatBytes(...labels, new Uint8Array([0]));
-  // DNS header: id=0x2222, flags=0x0100(RD), qd=1
   const hdr = new Uint8Array([0x22, 0x22, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
-  const qtype = new Uint8Array([0x00, 0x01, 0x00, 0x01]); // A, IN
+  const qtype = new Uint8Array([0x00, 0x01, 0x00, 0x01]);
   return concatBytes(hdr, qname, qtype);
 }
 
-/** 解析 DNS 响应，返回第一个 A 记录 IPv4（跳过 CNAME） */
 function parseDnsResponse(buf: Uint8Array): string | null {
   if (buf.length < 12) return null;
   const ancount = readU16(buf, 6);
@@ -155,15 +118,9 @@ function parseDnsResponse(buf: Uint8Array): string | null {
   return null;
 }
 
-// ---------------------------------------------------------------------------
-// 网络调用
-// ---------------------------------------------------------------------------
-/** 用猫猫云阿里云 PrivateZone DoH 解析节点域名 -> 真实 IP */
 async function resolveMaomaoDomain(domain: string): Promise<string | null> {
   if (ipCache.has(domain)) return ipCache.get(domain) ?? null;
   try {
-    // Workers 环境无本地 DNS 污染，直接用域名请求即可（Cloudflare 会解析并正确路由到 PrivateZone）。
-    // 注意：不能直连 223.5.5.5 裸 IP（Workers 无法自定义 Host 头，会被当作公网 DoH）。
     const q = buildDnsQuery(domain);
     const resp = await fetch(`https://${MAOMAO_DOH_HOST}/dns-query?dns=${base64UrlEncode(q)}`, {
       headers: { Accept: "application/dns-message", "User-Agent": UA },
@@ -177,7 +134,6 @@ async function resolveMaomaoDomain(domain: string): Promise<string | null> {
   }
 }
 
-/** 登录猫猫云后端 */
 async function maomaoLogin(host: string, email: string, password: string): Promise<string> {
   const resp = await fetch(`${host}/api/v1/passport/auth/login`, {
     method: "POST",
@@ -199,7 +155,6 @@ async function maomaoLogin(host: string, email: string, password: string): Promi
   return data.data.auth_data;
 }
 
-/** 调用猫猫云 API（JWT 直放 Authorization，无 Bearer） */
 async function maomaoApi<T>(host: string, path: string, jwt: string): Promise<T> {
   const resp = await fetch(`${host}${path}`, {
     headers: { "User-Agent": UA, Authorization: jwt, Accept: "application/json" },
@@ -208,47 +163,63 @@ async function maomaoApi<T>(host: string, path: string, jwt: string): Promise<T>
   return (data?.data ?? data) as T;
 }
 
-// ---------------------------------------------------------------------------
-// 订阅处理
-// ---------------------------------------------------------------------------
-function getCredentials(url: URL, env: Env) {
-  return {
-    email: url.searchParams.get("email") ?? env.MAOMAO_EMAIL ?? "",
-    password: url.searchParams.get("password") ?? env.MAOMAO_PASSWORD ?? "",
-    jwt: url.searchParams.get("token") ?? "",
-    host: (url.searchParams.get("host") ?? env.MAOMAO_HOST ?? "https://api.brfcdu.cn").replace(/\/+$/, ""),
-  };
+function shuffledHosts(override?: string): string[] {
+  const hosts = override && override.trim() ? [override.replace(/\/+$/, "")] : [...API_HOSTS];
+  for (let i = hosts.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = hosts[i];
+    hosts[i] = hosts[j];
+    hosts[j] = t;
+  }
+  return hosts;
 }
 
-async function handleSubscribe(url: URL, env: Env): Promise<Response> {
-  const { email, password, jwt: providedJwt, host } = getCredentials(url, env);
+interface Upstream {
+  jwt: string;
+  uuid: string;
+  servers: { name?: string }[];
+}
 
-  let jwt = providedJwt;
-  let uuid = "";
-  let servers: ServerMeta[] = [];
-
-  try {
-    if (!jwt) {
-      if (!email || !password) {
-        return jsonError(400, "缺少凭据：请配置 Secret(MAOMAO_EMAIL/MAOMAO_PASSWORD) 或使用 ?token=<auth_data> 参数");
-      }
-      jwt = await maomaoLogin(host, email, password);
+async function fetchUpstream(hosts: string[], email: string, password: string, token: string): Promise<Upstream> {
+  let lastErr: unknown;
+  for (const host of hosts) {
+    try {
+      let jwt = token;
+      if (!jwt) jwt = await maomaoLogin(host, email, password);
+      const sub = await maomaoApi<{ uuid?: string }>(host, "/api/v1/user/getSubscribe", jwt);
+      const uuid = sub?.uuid ?? "";
+      if (!uuid) throw new Error("getSubscribe 未返回 uuid");
+      const servers = await maomaoApi<{ name?: string }[]>(host, "/api/v1/user/server/fetch", jwt);
+      if (!Array.isArray(servers) || servers.length === 0) throw new Error("server/fetch 未返回节点");
+      return { jwt, uuid, servers };
+    } catch (err) {
+      console.warn("host failed", { host, message: err instanceof Error ? err.message : String(err) });
+      lastErr = err;
     }
+  }
+  throw lastErr ?? new Error("所有 API 域名均不可用");
+}
 
-    const sub = await maomaoApi<{ uuid?: string }>(host, "/api/v1/user/getSubscribe", jwt);
-    uuid = sub?.uuid ?? "";
-    if (!uuid) throw new Error("getSubscribe 未返回 uuid");
+async function handleSubscribe(url: URL): Promise<Response> {
+  const email = url.searchParams.get("email") ?? "";
+  const password = url.searchParams.get("password") ?? "";
+  const token = url.searchParams.get("token") ?? "";
+  const host = url.searchParams.get("host") ?? "";
 
-    servers = await maomaoApi<ServerMeta[]>(host, "/api/v1/user/server/fetch", jwt);
-    if (!Array.isArray(servers) || servers.length === 0) {
-      throw new Error("server/fetch 未返回节点");
-    }
-  } catch (err) {
-    console.error("upstream error", { message: err instanceof Error ? err.message : String(err) });
-    return jsonError(502, `上游获取失败: ${err instanceof Error ? err.message : String(err)}`);
+  if (!token && (!email || !password)) {
+    return jsonError(400, "请提供参数: ?email=&password= 或 ?token=<auth_data>");
   }
 
-  // 组装节点：映射表匹配 + 解析真实 IP（失败则保留域名，DNS 兜底已配猫猫云 DoH）
+  let upstream: Upstream;
+  try {
+    upstream = await fetchUpstream(shuffledHosts(host), email, password, token);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("upstream error", { message: msg });
+    return jsonError(502, `上游获取失败: ${msg}`);
+  }
+
+  const { uuid, servers } = upstream;
   const nodes: NodeDef[] = [];
   const seen = new Set<string>();
   for (const s of servers) {
@@ -263,7 +234,7 @@ async function handleSubscribe(url: URL, env: Env): Promise<Response> {
   }
 
   if (nodes.length === 0) {
-    return jsonError(502, "未能生成任何节点（映射表未命中）");
+    return jsonError(502, "未能生成任何节点");
   }
 
   const yaml = buildYaml(nodes, MAOMAO_DOH_HOST);
@@ -280,7 +251,6 @@ async function handleSubscribe(url: URL, env: Env): Promise<Response> {
   );
 }
 
-/** 生成标准 Clash YAML（DNS 指向猫猫云 DoH 兜底解析） */
 function buildYaml(nodes: NodeDef[], dohHost: string): string {
   const esc = (s: string) => s.replace(/"/g, '\\"');
   const proxyLines = nodes.map(
@@ -301,7 +271,7 @@ function buildYaml(nodes: NodeDef[], dohHost: string): string {
   const namesBlock = nodes.map((n) => `      - "${esc(n.name)}"`).join("\n");
   const dohUrl = `https://${dohHost}/dns-query`;
 
-  return `# 猫猫云 MaoMaoCloud - Worker 生成 (${nodes.length} 节点)
+  return `# maomaocloud ${nodes.length} nodes
 mixed-port: 7890
 allow-lan: false
 mode: rule
@@ -358,9 +328,6 @@ rules:
 `;
 }
 
-// ---------------------------------------------------------------------------
-// HTTP 辅助
-// ---------------------------------------------------------------------------
 function cors(res: Response): Response {
   const h = new Headers(res.headers);
   h.set("Access-Control-Allow-Origin", "*");
@@ -380,36 +347,26 @@ function jsonError(status: number, message: string): Response {
 
 function handleHome(): Response {
   const html = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
-<title>猫猫云订阅 Worker</title>
+<title>maomaocloud sub</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>body{font-family:system-ui;background:#0f172a;color:#e2e8f0;max-width:720px;margin:40px auto;padding:0 20px}
 code{background:#1e293b;padding:2px 6px;border-radius:4px}.box{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:20px;margin:16px 0}</style>
 </head><body>
-<h1>🐱 猫猫云订阅 Worker</h1>
-<p>将猫猫云私有订阅转换为标准 Clash / FlClash 订阅链接。</p>
-<div class="box"><h3>📎 订阅地址</h3>
-<p>配置 Secret 后使用：<code>/sub</code><br>或临时传参：<code>/sub?email=xxx&password=yyy</code></p></div>
-<div class="box"><h3>⚙️ Secrets</h3>
-<pre>wrangler secret put MAOMAO_EMAIL
-wrangler secret put MAOMAO_PASSWORD
-wrangler secret put MAOMAO_HOST   # 可选</pre></div>
+<h1>maomaocloud sub</h1>
+<div class="box"><code>/sub?email=xx@xx.com&password=xxxx</code><br><code>/sub?token=&lt;auth_data&gt;</code><br>可选 <code>host</code></div>
 </body></html>`;
   return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
 }
 
-// ---------------------------------------------------------------------------
-// Worker 入口
-// ---------------------------------------------------------------------------
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
 
     try {
       if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
-
       if (url.pathname === "/" || url.pathname === "") return handleHome();
       if (url.pathname === "/sub" || url.pathname === "/clash") {
-        return await handleSubscribe(url, env);
+        return await handleSubscribe(url);
       }
       return jsonError(404, "Not Found");
     } catch (err) {

@@ -40,26 +40,21 @@ npx wrangler login
 npx wrangler deploy
 ```
 
-### 配置账号（Secret，避免密码暴露在链接中）
-
-```bash
-npx wrangler secret put MAOMAO_EMAIL     # 猫猫云账号邮箱
-npx wrangler secret put MAOMAO_PASSWORD  # 猫猫云账号密码
-# 可选
-npx wrangler secret put MAOMAO_HOST      # API 域名，默认 https://api.brfcdu.cn
-```
-
-### 使用
+### 使用（凭据通过 URL 参数传入，无需配置环境变量）
 
 ```
-# 订阅链接（配置 Secret 后）
-https://<your-worker>.workers.dev/sub
-
-# 或临时用 query 传参（自用）
+# 方式 A：账号 + 密码
 https://<your-worker>.workers.dev/sub?email=xx@xx.com&password=xxxx
+
+# 方式 B：auth_data (JWT token，可避免每次登录)
+https://<your-worker>.workers.dev/sub?token=<auth_data>
 ```
 
-FlClash 中新增订阅并填入上述 URL 即可；节点 IP 每次更新时由 Worker 自动解析（动态变化）。
+- 可选参数 `host`：强制指定某个 API 域名
+- 未指定 `host` 时，Worker 内置多个 API 域名（`api.brfcdu.cn` / `mmyapi.lnnrhtp.com` / `app.maomao234.com` / `dy.maomaoapi.org`），**每次请求随机选一个，失败自动回退到其它域名**
+- 节点 IP 每次更新时由 Worker 自动通过猫猫云 DoH 解析（IP 动态变化）
+
+FlClash 中新增订阅并填入上述 URL 即可。
 
 ### 本地开发
 
