@@ -1,11 +1,14 @@
 {
   "name": "maomaocloud-subscribeworker",
-  "version": "1.0.0",
-  "description": "Cloudflare Worker to bypass MaoMaoCloud custom client and export Clash / Mihomo / Flclash subscription",
-  "main": "src/index.js",
+  "version": "2.0.0",
+  "private": true,
+  "description": "MaoMaoCloud (猫猫云) subscribe bridge on Cloudflare Workers — output standard Clash/FlClash subscription from the locked-down API",
+  "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "types": "wrangler types",
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [
     "maomaocloud",
@@ -13,13 +16,13 @@
     "flclash",
     "mihomo",
     "v2board",
-    "xboard",
-    "cloudflare-worker",
+    "cloudflare-workers",
     "subscription"
   ],
-  "author": "",
   "license": "MIT",
   "devDependencies": {
-    "wrangler": "^3.109.2"
+    "@cloudflare/workers-types": "^5.20260902.1",
+    "typescript": "^5.6.0",
+    "wrangler": "^4.128.0"
   }
 }
