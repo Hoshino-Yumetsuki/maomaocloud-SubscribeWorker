@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "maomaocloud-subscribeworker",
+  "main": "src/index.js",
+  "compatibility_date": "2024-09-01",
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "DEFAULT_API_HOST": "https://api.maomao.cloud",
+    "TOKEN_SALT": ""
+  }
+}
