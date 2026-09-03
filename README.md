@@ -10,7 +10,8 @@ https://maomaocloud-subscribeworker.robotxhub.ai
 
 参数二选一：`email+password` 或 `token`（`/full` 的 token 兼容订阅 token 与 auth_data，自动识别）。
 
-> **⚠️ 密码含特殊字符（`#` `!` `@` 等）必须先做 URL 编码**，否则 `#` 之后的字符会被当成链接片段截掉，导致 502。例：密码 `Q78kg123!@#` 在 URL 里要写成 `Q78kg123%21%40%23`。最省心的做法：先用编码后的密码访问一次 `/token` 拿到 `token`，之后订阅 URL 用 `?token=`（token 只有字母数字，永无编码烦恼）。
+> **💡 最省事用法**：打开首页（上面的公共实例），输入邮箱+密码即可一键生成订阅链接（密码特殊字符自动编码，不用管），生成「完整（显示流量/到期/机场名）」与「纯 token」两种，直接粘进 FlClash。
+> 若手搓 URL：密码含 `#` `!` `@` 等特殊字符时**必须先做 URL 编码**（`#→%23` `!→%21` `@→%40`），否则 `#` 之后的字符会被当成链接片段截掉，导致 502。
 
 ### /full
 解密官方手机app完整私有接口订阅，官方完整配置+所有节点（手机端比电脑端节点多）
@@ -55,7 +56,7 @@ python3 fetch_sub_api.py 账号 密码 [API域名] 输出.yaml
 - 节点协议 anytls，密码是账号 uuid（来自 getSubscribe）
 - 节点域名是私有 DNS，公网解析不到，需走猫猫云自己的 DoH（阿里 PrivateZone），IP 会变
 - 配置可直接用于 FlClash / Clash Verge
-- 用 `email+password`（或 `auth_data`）订阅时，响应带标准 `subscription-userinfo` / `profile-title` 头，FlClash 卡片会显示**流量 / 到期 / 机场名**（默认「猫猫云」，可用 `?title=` 改）；纯 `?token=` 订阅不显示流量
+- 用 `email+password`（或 `auth_data`）订阅时，响应带 `subscription-userinfo` 头，FlClash 卡片显示**流量 / 到期**；配置名默认「猫猫云」（`?title=` 可自定义），经 `content-disposition` 的 `filename*` 下发给 FlClash（FlClash 只认这个、不读 `profile-title`），Clash Verge 等其它客户端则用 `profile-title`。纯 `?token=` 订阅拿不到登录态，故不显示流量（但能正常订阅）
 - 首页有生成器：输入账号密码直接生成「完整（显示流量）」与「纯 token」两种订阅链接，密码特殊字符自动编码
 - 若订阅报 403 / “未返回节点”：多半是**账号套餐已过期或未在官方 App 激活订阅**，与解析服务无关；`/token` 现在会返回 `plan_name` / `expired_at` / `is_plan_expired` 供自查
 
