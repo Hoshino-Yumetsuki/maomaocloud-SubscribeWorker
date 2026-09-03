@@ -169,16 +169,62 @@ async function decryptV100(body: string): Promise<string> {
   return new TextDecoder().decode(finalBytes);
 }
 
-// 拿官方订阅 token（32hex）：登录响应 data.token，或 getSubscribe 返回的 sub.token
-async function fetchOfficialToken(host: string, email: string, password: string, token: string): Promise<string> {
-  if (token && !/^[0-9a-f]{32}$/i.test(token.trim())) {
-    // token 参数是 JWT(auth_data) 而非 32hex：先换订阅 token
-    const sub = await maomaoApi<{ token?: string }>(host, "/api/v1/user/getSubscribe", token.trim());
-    if (!sub?.token) throw new Error("getSubscribe 未返回订阅 token");
-    return sub.token;
+// —— 订阅信息头（subscription-userinfo / profile-title）：FlClash / mihomo 据此显示流量、到期、机场名 ——
+interface UserMeta {
+  u?: number; // 已用上行 bytes
+  d?: number; // 已用下行 bytes
+  total?: number; // 总流量 bytes
+  expire?: number; // 到期 unix 秒
+  plan?: string; // 套餐/机场名
+}
+// 默认机场名（FlClash 卡片显示名，可用 ?title= 参数覆盖为自定义名称）
+const DEFAULT_TITLE = "猫猫云";
+
+function toNum(v: unknown): number | undefined {
+  if (typeof v === "number") return v;
+  if (typeof v === "string" && v !== "") {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : undefined;
   }
-  if (token) return token.trim(); // 32hex 订阅 token 直用
-  // 登录模式：响应 data.token 即订阅 token
+  return undefined;
+}
+
+// 从 getSubscribe 返回里兜底提取（不同后端字段名可能不同：u/d/transfer_enable 等）
+function metaFromSub(sub: Record<string, unknown> | undefined): UserMeta | undefined {
+  if (!sub) return undefined;
+  const plan = (sub.plan && typeof sub.plan === "object" ? sub.plan : {}) as Record<string, unknown>;
+  const m: UserMeta = {
+    u: toNum(sub.u ?? sub.upload),
+    d: toNum(sub.d ?? sub.download),
+    total: toNum(sub.transfer_enable ?? sub.total),
+    expire: toNum(sub.expired_at),
+    plan:
+      typeof plan.name === "string"
+        ? plan.name
+        : typeof sub.plan_name === "string"
+          ? sub.plan_name
+          : undefined,
+  };
+  if (m.u === undefined && m.d === undefined && m.total === undefined && m.expire === undefined && m.plan === undefined) {
+    console.warn("getSubscribe 无可用用户信息字段", Object.keys(sub));
+    return undefined;
+  }
+  return m;
+}
+
+// 拼标准 subscription-userinfo 头：upload=..; download=..; total=..; expire=..
+function userinfoHeader(m: UserMeta | undefined): string | null {
+  if (!m) return null;
+  const parts: string[] = [];
+  if (m.u !== undefined) parts.push(`upload=${m.u}`);
+  if (m.d !== undefined) parts.push(`download=${m.d}`);
+  if (m.total !== undefined) parts.push(`total=${m.total}`);
+  if (m.expire !== undefined) parts.push(`expire=${m.expire}`);
+  return parts.length ? parts.join("; ") : null;
+}
+
+// 登录一次拿 auth_data + 订阅 token
+async function maomaoLoginInfo(host: string, email: string, password: string): Promise<{ auth: string; token: string }> {
   const resp = await fetch(`${host}/api/v1/passport/auth/login`, {
     method: "POST",
     headers: {
@@ -188,11 +234,34 @@ async function fetchOfficialToken(host: string, email: string, password: string,
     },
     body: new URLSearchParams({ email, password }).toString(),
   });
-  const data = (await resp.json()) as { status?: string; message?: string; data?: { token?: string } };
-  if (data?.status !== "success" || !data?.data?.token) {
+  const data = (await resp.json()) as {
+    status?: string;
+    message?: string;
+    data?: { auth_data?: string; token?: string };
+  };
+  if (data?.status !== "success" || !data?.data?.auth_data) {
     throw new Error(`猫猫云登录失败: ${data?.message ?? resp.status}`);
   }
-  return data.data.token;
+  return { auth: data.data.auth_data, token: data.data.token ?? "" };
+}
+
+// 用登录态实时取用户信息（失败静默——订阅本体不依赖它）
+async function fetchUserMeta(host: string, auth: string): Promise<UserMeta | undefined> {
+  try {
+    const sub = await maomaoApi<Record<string, unknown>>(host, "/api/v1/user/getSubscribe", auth);
+    return metaFromSub(sub);
+  } catch {
+    return undefined;
+  }
+}
+
+// 订阅响应附加头：机场名优先 title 参数，其次默认；流量头有值才加
+function subInfoHeaders(meta: UserMeta | undefined, titleParam: string): Record<string, string> {
+  const h: Record<string, string> = {};
+  const ui = userinfoHeader(meta);
+  if (ui) h["subscription-userinfo"] = ui;
+  h["profile-title"] = titleParam || DEFAULT_TITLE;
+  return h;
 }
 
 // 可选: 把 flow-map 节点里的 maomaogtm 域名替换为 DoH 解析出的真实 IP
@@ -207,21 +276,42 @@ async function replaceMaomaoDomainsWithIp(yaml: string): Promise<string> {
 }
 
 // 官方直解模式：拉 v100 加密订阅 → AES 解密 → 返回官方标准配置（105 节点 + 官方分流）
+// 附带标准订阅头 subscription-userinfo / profile-title（FlClash 据此显示流量、到期、机场名）
 async function handleOfficialSub(url: URL): Promise<Response> {
   const email = url.searchParams.get("email") ?? "";
   const password = url.searchParams.get("password") ?? "";
   const token = url.searchParams.get("token") ?? "";
+  const authParam = url.searchParams.get("auth") ?? "";
   const host = url.searchParams.get("host") ?? "";
   const wantIp = url.searchParams.get("ip") === "1";
+  const titleParam = url.searchParams.get("title") ?? "";
 
-  if (!token && (!email || !password)) {
+  if (!token && !authParam && (!email || !password)) {
     return jsonError(400, "请提供参数: ?email=&password= 或 ?token=<订阅token|auth_data>");
   }
 
   let lastErr: unknown;
   for (const h of shuffledHosts(host)) {
     try {
-      const subToken = await fetchOfficialToken(h, email, password, token);
+      // 解析登录态 auth 与订阅 token：32hex 直用；auth_data 换订阅 token；否则账号密码登录
+      let auth = authParam;
+      if (token && !/^[0-9a-f]{32}$/i.test(token.trim())) auth = token.trim();
+      let subToken = token && /^[0-9a-f]{32}$/i.test(token.trim()) ? token.trim() : "";
+      if (!subToken && auth) {
+        const s = await maomaoApi<{ token?: string }>(h, "/api/v1/user/getSubscribe", auth);
+        if (!s?.token) throw new Error("getSubscribe 未返回订阅 token");
+        subToken = s.token;
+      }
+      if (!subToken) {
+        const li = await maomaoLoginInfo(h, email, password);
+        auth = li.auth;
+        subToken = li.token;
+      }
+      if (!subToken) throw new Error("无法取得订阅 token");
+
+      // 流量/到期/套餐信息：能拿到登录态就实时查一次（失败静默，不影响订阅本体）
+      const meta = auth ? await fetchUserMeta(h, auth) : undefined;
+
       const resp = await fetch(`${h}/api/v100/client/subscribe?token=${encodeURIComponent(subToken)}`, {
         headers: { "User-Agent": UA, Accept: "*/*" },
       });
@@ -239,6 +329,7 @@ async function handleOfficialSub(url: URL): Promise<Response> {
             "Content-Disposition": 'attachment; filename="maomaocloud-official.yaml"',
             "Cache-Control": "no-store",
             "Profile-Update-Interval": "24",
+            ...subInfoHeaders(meta, titleParam),
           },
         })
       );
@@ -253,25 +344,9 @@ async function handleOfficialSub(url: URL): Promise<Response> {
   );
 }
 
+// 只取 auth_data 的便捷封装（/lite 上游与旧调用用）
 async function maomaoLogin(host: string, email: string, password: string): Promise<string> {
-  const resp = await fetch(`${host}/api/v1/passport/auth/login`, {
-    method: "POST",
-    headers: {
-      "User-Agent": UA,
-      "Content-Type": "application/x-www-form-urlencoded",
-      Accept: "application/json",
-    },
-    body: new URLSearchParams({ email, password }).toString(),
-  });
-  const data = (await resp.json()) as {
-    status?: string;
-    message?: string;
-    data?: { auth_data?: string };
-  };
-  if (data?.status !== "success" || !data?.data?.auth_data) {
-    throw new Error(`猫猫云登录失败: ${data?.message ?? resp.status}`);
-  }
-  return data.data.auth_data;
+  return (await maomaoLoginInfo(host, email, password)).auth;
 }
 
 // /token：账号密码 → token / auth_data / uuid（供 /full?token=、/lite 及手工构造节点用）
@@ -285,24 +360,8 @@ async function handleToken(url: URL): Promise<Response> {
   let lastErr: unknown;
   for (const h of shuffledHosts(host)) {
     try {
-      const resp = await fetch(`${h}/api/v1/passport/auth/login`, {
-        method: "POST",
-        headers: {
-          "User-Agent": UA,
-          "Content-Type": "application/x-www-form-urlencoded",
-          Accept: "application/json",
-        },
-        body: new URLSearchParams({ email, password }).toString(),
-      });
-      const data = (await resp.json()) as {
-        status?: string;
-        message?: string;
-        data?: { auth_data?: string; token?: string };
-      };
-      if (data?.status !== "success" || !data?.data?.auth_data) {
-        throw new Error(`登录失败: ${data?.message ?? resp.status}`);
-      }
-      const jwt = data.data.auth_data;
+      const li = await maomaoLoginInfo(h, email, password);
+      const jwt = li.auth;
       const sub = await maomaoApi<Record<string, unknown>>(h, "/api/v1/user/getSubscribe", jwt);
       const pick = (k: string) => (sub && sub[k] !== undefined ? sub[k] : null);
       return cors(
@@ -310,7 +369,7 @@ async function handleToken(url: URL): Promise<Response> {
           JSON.stringify(
             {
               email,
-              token: data.data.token ?? null,
+              token: li.token,
               auth_data: jwt,
               uuid: pick("uuid"),
               subscribe_url: pick("subscribe_url"),
@@ -319,8 +378,9 @@ async function handleToken(url: URL): Promise<Response> {
               plan_name: (sub?.plan as { name?: string } | undefined)?.name ?? null,
               expired_at: pick("expired_at"),
               is_plan_expired: pick("is_plan_expired"),
-              transfer_used: pick("transfer_used"),
               transfer_enable: pick("transfer_enable"),
+              upload: pick("u") ?? pick("upload"),
+              download: pick("d") ?? pick("download"),
             },
             null,
             2
@@ -372,6 +432,7 @@ interface Upstream {
   jwt: string;
   uuid: string;
   servers: { name?: string }[];
+  sub?: Record<string, unknown>;
 }
 
 async function fetchUpstream(hosts: string[], email: string, password: string, token: string): Promise<Upstream> {
@@ -380,12 +441,12 @@ async function fetchUpstream(hosts: string[], email: string, password: string, t
     try {
       let jwt = token;
       if (!jwt) jwt = await maomaoLogin(host, email, password);
-      const sub = await maomaoApi<{ uuid?: string }>(host, "/api/v1/user/getSubscribe", jwt);
-      const uuid = sub?.uuid ?? "";
+      const sub = await maomaoApi<Record<string, unknown>>(host, "/api/v1/user/getSubscribe", jwt);
+      const uuid = typeof sub?.uuid === "string" ? sub.uuid : "";
       if (!uuid) throw new Error("getSubscribe 未返回 uuid");
       const servers = await maomaoApi<{ name?: string }[]>(host, "/api/v1/user/server/fetch", jwt);
       if (!Array.isArray(servers) || servers.length === 0) throw new Error("server/fetch 未返回节点");
-      return { jwt, uuid, servers };
+      return { jwt, uuid, servers, sub };
     } catch (err) {
       console.warn("host failed", { host, message: err instanceof Error ? err.message : String(err) });
       lastErr = err;
@@ -399,6 +460,7 @@ async function handleSubscribe(url: URL): Promise<Response> {
   const password = url.searchParams.get("password") ?? "";
   const token = url.searchParams.get("token") ?? "";
   const host = url.searchParams.get("host") ?? "";
+  const titleParam = url.searchParams.get("title") ?? "";
 
   if (!token && (!email || !password)) {
     return jsonError(400, "请提供参数: ?email=&password= 或 ?token=<auth_data>");
@@ -440,6 +502,7 @@ async function handleSubscribe(url: URL): Promise<Response> {
         "Content-Disposition": 'attachment; filename="maomaocloud.yaml"',
         "Cache-Control": "no-store",
         "Profile-Update-Interval": "24",
+        ...subInfoHeaders(metaFromSub(upstream.sub), titleParam),
       },
     })
   );
@@ -577,7 +640,7 @@ button.cp{margin-top:0;padding:4px 10px;font-size:12px;background:#334155;margin
 <div id="out"></div>
 </div>
 
-<div class="box" style="border-color:#b45309;background:#451a03"><b>⚠️ 说明</b> — 生成的是 <code>?token=</code> 格式（token 只有字母数字），所以密码里有 <code>#</code> <code>!</code> <code>@</code> 等也不用自己编码，直接粘给 FlClash 即可。<br>token 相当于官方订阅令牌：只要不在官方 App 里「重置订阅」就一直有效；套餐过期后订阅会返回 403，需先续费。</div>
+<div class="box" style="border-color:#b45309;background:#451a03"><b>⚠️ 说明</b> — 密码里的 <code>#</code> <code>!</code> <code>@</code> 等由网页自动编码，不用自己处理。<br>带账号密码的完整链接每次更新都会实时查流量/到期/机场名，FlClash 卡片上直接显示；纯 token 链接订阅照样能用但不显示流量（且不含密码，适合转发）。套餐过期后订阅会返回 403，需先续费。</div>
 
 <div class="box"><b>手动端点（进阶）</b><span class="dim"> · 参数 email+password 或 token 二选一</span><br>
 <code>…/full?email=xx%40xx.com&amp;password=编码后密码</code> — 官方完整配置<br>
@@ -602,16 +665,19 @@ function gen(){
         return;
       }
       var base=location.origin;
-      var full=base+'/full?token='+j.token;
-      var lite=base+'/lite?token='+encodeURIComponent(j.auth_data||'');
-      var s='<div class="box" style="border-color:#22c55e"><b class="ok">✅ 验证通过</b> — 复制下面链接粘贴到 FlClash（订阅类型选 Clash）</div>';
+      var qe=encodeURIComponent(em), qp=encodeURIComponent(pw);
+      var fullAuth=base+'/full?email='+qe+'&password='+qp;
+      var fullTok=base+'/full?token='+j.token;
+      var liteAuth=base+'/lite?email='+qe+'&password='+qp;
+      var s='<div class="box" style="border-color:#22c55e"><b class="ok">✅ 验证通过</b> — 复制链接粘贴到 FlClash（订阅类型选 Clash）</div>';
       if(j.plan_name){
         var expd='';if(j.expired_at){expd=new Date(j.expired_at*1000).toLocaleString();}
         var over=!!(j.expired_at&&j.expired_at*1000<Date.now());
         s+='<div class="box">套餐：'+esc(j.plan_name)+' ｜ 到期：'+esc(expd)+(over?' <b class="err">（已过期，订阅会 403，请先续费）</b>':' <span class="ok">（有效）</span>')+'</div>';
       }
-      s+='<div class="box"><b>/full · 官方完整配置（推荐）</b><br><code id="u1">'+full+'</code><button class="cp" type="button" onclick="cp(1,this)">复制</button></div>';
-      s+='<div class="box"><b>/lite · 精简节点</b><br><code id="u2">'+lite+'</code><button class="cp" type="button" onclick="cp(2,this)">复制</button></div>';
+      s+='<div class="box"><b>/full · 官方完整（推荐，FlClash 显示流量/到期/机场名）</b><br><code id="u1">'+esc(fullAuth)+'</code><button class="cp" type="button" onclick="cp(1,this)">复制</button></div>';
+      s+='<div class="box"><b>/full · 纯 token 精简（无流量显示，可放心转发）</b><br><code id="u2">'+esc(fullTok)+'</code><button class="cp" type="button" onclick="cp(2,this)">复制</button></div>';
+      s+='<div class="box"><b>/lite · 精简节点</b><br><code id="u3">'+esc(liteAuth)+'</code><button class="cp" type="button" onclick="cp(3,this)">复制</button></div>';
       out.innerHTML=s;
     })
     .catch(function(e){out.innerHTML='<div class="box" style="border-color:#dc2626"><b class="err">网络错误</b><br>'+esc(String(e))+'</div>';})

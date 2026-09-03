@@ -55,6 +55,8 @@ python3 fetch_sub_api.py 账号 密码 [API域名] 输出.yaml
 - 节点协议 anytls，密码是账号 uuid（来自 getSubscribe）
 - 节点域名是私有 DNS，公网解析不到，需走猫猫云自己的 DoH（阿里 PrivateZone），IP 会变
 - 配置可直接用于 FlClash / Clash Verge
+- 用 `email+password`（或 `auth_data`）订阅时，响应带标准 `subscription-userinfo` / `profile-title` 头，FlClash 卡片会显示**流量 / 到期 / 机场名**（默认「猫猫云」，可用 `?title=` 改）；纯 `?token=` 订阅不显示流量
+- 首页有生成器：输入账号密码直接生成「完整（显示流量）」与「纯 token」两种订阅链接，密码特殊字符自动编码
 - 若订阅报 403 / “未返回节点”：多半是**账号套餐已过期或未在官方 App 激活订阅**，与解析服务无关；`/token` 现在会返回 `plan_name` / `expired_at` / `is_plan_expired` 供自查
 
 ## 所谓“私有协议”
