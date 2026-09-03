@@ -255,12 +255,16 @@ async function fetchUserMeta(host: string, auth: string): Promise<UserMeta | und
   }
 }
 
-// 订阅响应附加头：机场名优先 title 参数，其次默认；流量头有值才加
+// 订阅响应附加头：机场名优先 title 参数，其次默认
+// 注意：FlClash 实际用 content-disposition 的 filename*（UTF-8）作为配置标题；profile-title 仅其它客户端参考
 function subInfoHeaders(meta: UserMeta | undefined, titleParam: string): Record<string, string> {
-  const h: Record<string, string> = {};
+  const title = titleParam || DEFAULT_TITLE;
+  const h: Record<string, string> = {
+    "profile-title": title,
+    "Content-Disposition": `attachment; filename="maomaocloud.yaml"; filename*=UTF-8''${encodeURIComponent(title)}`,
+  };
   const ui = userinfoHeader(meta);
   if (ui) h["subscription-userinfo"] = ui;
-  h["profile-title"] = titleParam || DEFAULT_TITLE;
   return h;
 }
 
@@ -326,7 +330,6 @@ async function handleOfficialSub(url: URL): Promise<Response> {
           status: 200,
           headers: {
             "Content-Type": "text/yaml; charset=utf-8",
-            "Content-Disposition": 'attachment; filename="maomaocloud-official.yaml"',
             "Cache-Control": "no-store",
             "Profile-Update-Interval": "24",
             ...subInfoHeaders(meta, titleParam),
@@ -499,7 +502,6 @@ async function handleSubscribe(url: URL): Promise<Response> {
       status: 200,
       headers: {
         "Content-Type": "text/yaml; charset=utf-8",
-        "Content-Disposition": 'attachment; filename="maomaocloud.yaml"',
         "Cache-Control": "no-store",
         "Profile-Update-Interval": "24",
         ...subInfoHeaders(metaFromSub(upstream.sub), titleParam),
