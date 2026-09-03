@@ -556,21 +556,75 @@ function handleHome(): Response {
 <title>maomaocloud sub</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>body{font-family:system-ui;background:#0f172a;color:#e2e8f0;max-width:820px;margin:40px auto;padding:0 20px}
-code{background:#1e293b;padding:2px 6px;border-radius:4px;word-break:break-all;font-size:14px}.box{border:1px solid #334155;border-radius:10px;padding:14px 18px;margin:12px 0}</style>
+code{background:#1e293b;padding:2px 6px;border-radius:4px;word-break:break-all;font-size:13px}.box{border:1px solid #334155;border-radius:10px;padding:14px 18px;margin:12px 0}
+label{display:block;margin-top:10px;color:#94a3b8;font-size:13px}
+input{background:#0b1220;border:1px solid #334155;color:#e2e8f0;padding:9px 12px;border-radius:6px;width:100%;box-sizing:border-box;margin-top:4px;font-size:14px}
+input:focus{outline:none;border-color:#2563eb}
+button{background:#2563eb;color:#fff;border:none;padding:10px 16px;border-radius:6px;cursor:pointer;font-size:14px;margin-top:12px}
+button:hover{background:#1d4ed8}button:disabled{opacity:.6;cursor:default}
+button.cp{margin-top:0;padding:4px 10px;font-size:12px;background:#334155;margin-left:6px;vertical-align:middle}
+.ok{color:#4ade80}.err{color:#f87171}.dim{color:#94a3b8;font-size:13px}</style>
 </head><body>
 <h2>maomaocloud sub</h2>
-<p style="color:#94a3b8">参数 email+password 或 token 二选一</p>
-<div class="box" style="border-color:#b45309;background:#451a03"><b>⚠️ 密码含特殊字符必看</b> — 密码中的 <code>#</code> <code>!</code> <code>@</code> 等必须先做 URL 编码，否则会被截断导致 502。<br>
-例：密码 <code>Q78kg123!@#</code> 应写成 <code>Q78kg123%21%40%23</code><br>
-也可先访问 <code>/token</code>（用编码后的密码）拿到 <code>token</code>，再改用 <code>?token=&lt;token&gt;</code>（token 无特殊字符，最省心）</div>
-<div class="box"><b>/full</b> — 解密官方 v100 订阅，官方完整配置（105 节点）<br>
-<code>https://maomaocloud-subscribeworker.robotxhub.ai/full?email=xx%40xx.com&password=<b>编码后密码</b></code><br>
-<code>https://maomaocloud-subscribeworker.robotxhub.ai/full?token=&lt;token&gt;</code></div>
-<div class="box"><b>/lite</b> — 按逆向节点映射精简拼装<br>
-<code>https://maomaocloud-subscribeworker.robotxhub.ai/lite?email=xx%40xx.com&password=<b>编码后密码</b></code><br>
-<code>https://maomaocloud-subscribeworker.robotxhub.ai/lite?token=&lt;auth_data&gt;</code></div>
-<div class="box"><b>/token</b> — 账号密码换 token / auth_data / uuid / 套餐状态（JSON）<br>
-<code>https://maomaocloud-subscribeworker.robotxhub.ai/token?email=xx%40xx.com&password=<b>编码后密码</b></code></div>
+<p style="color:#94a3b8">输入猫猫云账号密码，一键生成可直接填入 FlClash 的订阅链接（token 格式，密码里的特殊字符不用管）</p>
+
+<div class="box" style="border-color:#16a34a">
+<form onsubmit="gen();return false">
+  <label for="em">邮箱</label><input id="em" type="email" placeholder="you@example.com" autocomplete="username">
+  <label for="pw">密码</label><input id="pw" type="password" placeholder="猫猫云账号密码" autocomplete="current-password">
+  <button id="btn" type="submit">生成订阅链接</button>
+</form>
+<div id="out"></div>
+</div>
+
+<div class="box" style="border-color:#b45309;background:#451a03"><b>⚠️ 说明</b> — 生成的是 <code>?token=</code> 格式（token 只有字母数字），所以密码里有 <code>#</code> <code>!</code> <code>@</code> 等也不用自己编码，直接粘给 FlClash 即可。<br>token 相当于官方订阅令牌：只要不在官方 App 里「重置订阅」就一直有效；套餐过期后订阅会返回 403，需先续费。</div>
+
+<div class="box"><b>手动端点（进阶）</b><span class="dim"> · 参数 email+password 或 token 二选一</span><br>
+<code>…/full?email=xx%40xx.com&amp;password=编码后密码</code> — 官方完整配置<br>
+<code>…/lite?email=xx%40xx.com&amp;password=编码后密码</code> — 精简节点<br>
+<code>…/token?email=xx%40xx.com&amp;password=编码后密码</code> — 只换 token（JSON）<br>
+<span class="dim">支持 host= 指定 API 域名；/full 另有 ip=1 把节点域名换成实时解析 IP</span></div>
+
+<script>
+function gen(){
+  var em=document.getElementById('em').value.trim();
+  var pw=document.getElementById('pw').value;
+  var out=document.getElementById('out');
+  var btn=document.getElementById('btn');
+  if(!em||!pw){out.innerHTML='<div class="box" style="border-color:#dc2626"><b class="err">请输入邮箱和密码</b></div>';return;}
+  btn.disabled=true;btn.textContent='验证中…';
+  fetch('/token?email='+encodeURIComponent(em)+'&password='+encodeURIComponent(pw))
+    .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j};});})
+    .then(function(x){
+      var j=x.j;
+      if(!x.ok||!j.token){
+        out.innerHTML='<div class="box" style="border-color:#dc2626"><b class="err">生成失败</b><br><code>'+esc(j.error||('HTTP '+x.ok))+'</code></div>';
+        return;
+      }
+      var base=location.origin;
+      var full=base+'/full?token='+j.token;
+      var lite=base+'/lite?token='+encodeURIComponent(j.auth_data||'');
+      var s='<div class="box" style="border-color:#22c55e"><b class="ok">✅ 验证通过</b> — 复制下面链接粘贴到 FlClash（订阅类型选 Clash）</div>';
+      if(j.plan_name){
+        var expd='';if(j.expired_at){expd=new Date(j.expired_at*1000).toLocaleString();}
+        var over=!!(j.expired_at&&j.expired_at*1000<Date.now());
+        s+='<div class="box">套餐：'+esc(j.plan_name)+' ｜ 到期：'+esc(expd)+(over?' <b class="err">（已过期，订阅会 403，请先续费）</b>':' <span class="ok">（有效）</span>')+'</div>';
+      }
+      s+='<div class="box"><b>/full · 官方完整配置（推荐）</b><br><code id="u1">'+full+'</code><button class="cp" type="button" onclick="cp(1,this)">复制</button></div>';
+      s+='<div class="box"><b>/lite · 精简节点</b><br><code id="u2">'+lite+'</code><button class="cp" type="button" onclick="cp(2,this)">复制</button></div>';
+      out.innerHTML=s;
+    })
+    .catch(function(e){out.innerHTML='<div class="box" style="border-color:#dc2626"><b class="err">网络错误</b><br>'+esc(String(e))+'</div>';})
+    .then(function(){btn.disabled=false;btn.textContent='生成订阅链接';});
+}
+function cp(n,b){
+  var t=document.getElementById('u'+n).textContent;
+  function done(){b.textContent='已复制';setTimeout(function(){b.textContent='复制';},1600);}
+  function fallback(){var ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');}catch(e){}document.body.removeChild(ta);done();}
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(done,fallback);}else{fallback();}
+}
+function esc(s){var d=document.createElement('div');d.textContent=String(s==null?'':s);return d.innerHTML;}
+</script>
 </body></html>`;
   return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
 }
