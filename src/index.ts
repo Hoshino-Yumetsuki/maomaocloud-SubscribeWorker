@@ -247,7 +247,10 @@ async function handleOfficialSub(url: URL): Promise<Response> {
       lastErr = err;
     }
   }
-  return jsonError(502, `官方订阅获取失败: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`);
+  return jsonError(
+    502,
+    hint(`官方订阅获取失败: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`)
+  );
 }
 
 async function maomaoLogin(host: string, email: string, password: string): Promise<string> {
@@ -300,11 +303,8 @@ async function handleToken(url: URL): Promise<Response> {
         throw new Error(`登录失败: ${data?.message ?? resp.status}`);
       }
       const jwt = data.data.auth_data;
-      const sub = await maomaoApi<{ uuid?: string; subscribe_url?: string }>(
-        h,
-        "/api/v1/user/getSubscribe",
-        jwt
-      );
+      const sub = await maomaoApi<Record<string, unknown>>(h, "/api/v1/user/getSubscribe", jwt);
+      const pick = (k: string) => (sub && sub[k] !== undefined ? sub[k] : null);
       return cors(
         new Response(
           JSON.stringify(
@@ -312,8 +312,15 @@ async function handleToken(url: URL): Promise<Response> {
               email,
               token: data.data.token ?? null,
               auth_data: jwt,
-              uuid: sub?.uuid ?? null,
-              subscribe_url: sub?.subscribe_url ?? null,
+              uuid: pick("uuid"),
+              subscribe_url: pick("subscribe_url"),
+              // 订阅状态诊断字段（套餐/到期/流量）
+              plan_id: pick("plan_id"),
+              plan_name: (sub?.plan as { name?: string } | undefined)?.name ?? null,
+              expired_at: pick("expired_at"),
+              is_plan_expired: pick("is_plan_expired"),
+              transfer_used: pick("transfer_used"),
+              transfer_enable: pick("transfer_enable"),
             },
             null,
             2
@@ -332,7 +339,7 @@ async function handleToken(url: URL): Promise<Response> {
       lastErr = err;
     }
   }
-  return jsonError(502, `获取失败: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`);
+  return jsonError(502, hint(`获取失败: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`));
 }
 
 async function maomaoApi<T>(host: string, path: string, jwt: string): Promise<T> {
@@ -403,7 +410,7 @@ async function handleSubscribe(url: URL): Promise<Response> {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("upstream error", { message: msg });
-    return jsonError(502, `上游获取失败: ${msg}`);
+    return jsonError(502, hint(`上游获取失败: ${msg}`));
   }
 
   const { uuid, servers } = upstream;
@@ -532,6 +539,18 @@ function jsonError(status: number, message: string): Response {
   );
 }
 
+// 把常见失败转成可操作的提示（密码特殊字符未编码 / 订阅未激活）
+function hint(msg: string): string {
+  if (/登录失败|邮箱或密码错误|login fail/i.test(msg)) {
+    return `${msg}。若密码含 # ! @ 等特殊字符，请先做 URL 编码（#→%23、!→%21、@→%40，如 ?password=p%21%40%23）；` +
+      `或先访问 /token?email=..&password=<编码后密码> 取得 token，再改用 ?token=<token> 订阅`;
+  }
+  if (/\b403\b/.test(msg)) {
+    return `${msg}。订阅 token 无效或订阅未激活：请先在官方 App 登录一次以激活订阅，并确认账号存在有效套餐且未过期`;
+  }
+  return msg;
+}
+
 function handleHome(): Response {
   const html = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
 <title>maomaocloud sub</title>
@@ -541,14 +560,17 @@ code{background:#1e293b;padding:2px 6px;border-radius:4px;word-break:break-all;f
 </head><body>
 <h2>maomaocloud sub</h2>
 <p style="color:#94a3b8">参数 email+password 或 token 二选一</p>
+<div class="box" style="border-color:#b45309;background:#451a03"><b>⚠️ 密码含特殊字符必看</b> — 密码中的 <code>#</code> <code>!</code> <code>@</code> 等必须先做 URL 编码，否则会被截断导致 502。<br>
+例：密码 <code>Q78kg123!@#</code> 应写成 <code>Q78kg123%21%40%23</code><br>
+也可先访问 <code>/token</code>（用编码后的密码）拿到 <code>token</code>，再改用 <code>?token=&lt;token&gt;</code>（token 无特殊字符，最省心）</div>
 <div class="box"><b>/full</b> — 解密官方 v100 订阅，官方完整配置（105 节点）<br>
-<code>https://maomaocloud-subscribeworker.robotxhub.ai/full?email=xx@xx.com&password=xxxx</code><br>
+<code>https://maomaocloud-subscribeworker.robotxhub.ai/full?email=xx%40xx.com&password=<b>编码后密码</b></code><br>
 <code>https://maomaocloud-subscribeworker.robotxhub.ai/full?token=&lt;token&gt;</code></div>
 <div class="box"><b>/lite</b> — 按逆向节点映射精简拼装<br>
-<code>https://maomaocloud-subscribeworker.robotxhub.ai/lite?email=xx@xx.com&password=xxxx</code><br>
+<code>https://maomaocloud-subscribeworker.robotxhub.ai/lite?email=xx%40xx.com&password=<b>编码后密码</b></code><br>
 <code>https://maomaocloud-subscribeworker.robotxhub.ai/lite?token=&lt;auth_data&gt;</code></div>
-<div class="box"><b>/token</b> — 账号密码换 token / auth_data / uuid（JSON）<br>
-<code>https://maomaocloud-subscribeworker.robotxhub.ai/token?email=xx@xx.com&password=xxxx</code></div>
+<div class="box"><b>/token</b> — 账号密码换 token / auth_data / uuid / 套餐状态（JSON）<br>
+<code>https://maomaocloud-subscribeworker.robotxhub.ai/token?email=xx%40xx.com&password=<b>编码后密码</b></code></div>
 </body></html>`;
   return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
 }
